@@ -1,34 +1,60 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+"use client"
+
+import { useState } from "react"
+import { ComplaintProvider } from "./contexts/ComplaintContext"
+import { SidebarProvider } from "./components/ui/sidebar"
+import AppSidebar from "./components/AppSidebar"
+import HomePage from "./components/HomePage"
+import ComplaintForm from "./components/ComplaintForm"
+import HistoryPage from "./components/HistoryPage"
+import "./App.css"
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState("home")
+  const [selectedCategory, setSelectedCategory] = useState(null)
+
+  const handleCategorySelect = (category) => {
+    setSelectedCategory(category)
+    setCurrentPage("complaint-form")
+  }
+
+  const handleBackToHome = () => {
+    setCurrentPage("home")
+    setSelectedCategory(null)
+  }
+
+  const handleNavigateToHistory = () => {
+    setCurrentPage("history")
+  }
+
+  const renderCurrentPage = () => {
+    switch (currentPage) {
+      case "home":
+        return <HomePage onCategorySelect={handleCategorySelect} />
+      case "complaint-form":
+        return <ComplaintForm category={selectedCategory} onBack={handleBackToHome} onSuccess={handleBackToHome} />
+      case "history":
+        return <HistoryPage onBack={handleBackToHome} />
+      default:
+        return <HomePage onCategorySelect={handleCategorySelect} />
+    }
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="App">
+      <ComplaintProvider>
+        <SidebarProvider>
+          <div className="flex min-h-screen w-full bg-background">
+            <AppSidebar
+              onNavigateHome={handleBackToHome}
+              onNavigateHistory={handleNavigateToHistory}
+              currentPage={currentPage}
+            />
+            <main className="flex-1">{renderCurrentPage()}</main>
+          </div>
+        </SidebarProvider>
+      </ComplaintProvider>
+    </div>
   )
 }
 
