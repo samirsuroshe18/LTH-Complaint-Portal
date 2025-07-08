@@ -7,6 +7,7 @@ const sendNotification = (token, action, payload) => {
         notification: {
             title: userName,
             body: textMessage,
+            imageUrl: 'https://foo.bar.pizza-monster.png'
         },
         data: {
             userId,

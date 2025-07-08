@@ -37,12 +37,14 @@ import userRouter from './routes/user.routes.js';
 import complaintRouter from './routes/complaint.routes.js';
 import adminRouter from './routes/admin.routes.js';
 import sectorAdminRouter from './routes/sectoradmin.routes.js';
+import technicianRouter from './routes/technician.routes.js';
 
 //Routes declaration
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/complaint", complaintRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/sectoradmin", sectorAdminRouter);
+app.use("/api/v1/technician", technicianRouter);
 
 // Custom error handeling
 app.use(errorHandler)

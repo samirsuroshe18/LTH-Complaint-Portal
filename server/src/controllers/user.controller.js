@@ -54,13 +54,13 @@ const createSuperAdmin = catchAsync(async (req, res, next) => {
 });
 
 const loginUser = catchAsync(async (req, res) => {
-    const { email, password, FCMToken } = req.body;
+    const { email, password, FCMToken, role } = req.body;
 
     if (!email || !password) {
         throw new ApiError(400, "All fields are required");
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email, role });
 
     if (!user) {
         throw new ApiError(404, "Invalid credential");
