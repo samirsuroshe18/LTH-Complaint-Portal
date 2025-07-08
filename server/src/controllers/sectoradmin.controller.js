@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { User } from "../models/user.model.js";
 import { Complaint } from "../models/complaint.model.js";
+import { Resolution } from "../models/resolution.model.js";
 import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import catchAsync from "../utils/catchAsync.js";
@@ -39,7 +40,17 @@ const createTechnician = catchAsync(async (req, res) => {
 
 const getComplaintDetails = catchAsync(async (req, res) => {
     const id = mongoose.Types.ObjectId.createFromHexString(req.params.id);
-    const complaint = await Complaint.findById(id);
+    const complaint = await Complaint.findById(id)
+        .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        });
 
     if (!complaint) {
         throw new ApiError(404, "Complaint not found");
@@ -124,42 +135,42 @@ const getComplaints = catchAsync(async (req, res) => {
 });
 
 const assignedTechnician = catchAsync(async (req, res) => {
-    const { complaintId, technicianId } = req.body;
+    const { complaintId, assignedWorker } = req.body;
     const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
-    const technicianObjectId = mongoose.Types.ObjectId.createFromHexString(technicianId);
+    const workerObjectId = mongoose.Types.ObjectId.createFromHexString(assignedWorker);
 
     const complaint = await Complaint.findById(complaintObjectId);
     if (!complaint) {
         throw new ApiError(404, "Complaint not found");
     }
 
-    const technician = await User.findById(technicianObjectId);
+    const technician = await User.findById(workerObjectId);
     if (!technician || technician.role !== "technician") {
         throw new ApiError(404, "Technician not found");
     }
 
-    complaint.technicianId = technician._id;
+    complaint.assignedWorker = technician._id;
     complaint.assignStatus = "assigned";
     complaint.assignedBy = req.user._id;
     complaint.assignedAt = new Date();
 
     const updatedComplaint = await complaint.save({ validateBeforeSave: false });
-    
+
     if (!updatedComplaint) {
         throw new ApiError(500, "Failed to assign technician to complaint");
     }
 
     const response = await Complaint.findById(updatedComplaint._id)
-        .populate("technicianId", "userName email profile role phoneNo")
-        .populate("assignedBy", "userName email profile role phoneNo");
-        // .populate({
-        //     path: 'resolution',
-        //     populate: [
-        //         { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
-        //         { path: 'approvedBy', select: 'userName email profile role phoneNo' },
-        //         { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
-        //     ]
-        // });
+        .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        });
 
     if (!response) {
         throw new ApiError(500, "Failed to fetch updated complaint details");
@@ -172,7 +183,7 @@ const assignedTechnician = catchAsync(async (req, res) => {
         action: 'ASSIGN_COMPLAINT',
     };
 
-    if( technician?.FCMToken) {
+    if (technician?.FCMToken) {
         sendNotification(technician.FCMToken, payload.action, JSON.stringify(payload));
     }
 
@@ -228,6 +239,28 @@ const approveResolution = catchAsync(async (req, res) => {
         throw new ApiError(404, "Resolution not found or could not be updated.");
     }
 
+    const complaint = await Complaint.findOneAndUpdate(
+        { complaintId: req.params.id },
+        {
+            $set: { status: "resolved" },
+        },
+        { new: true }  // Return the updated document
+    ).
+        populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        });
+
+    if (!complaint) {
+        throw new ApiError(404, "Complaint not found or could not be updated.");
+    }
+
     let payload = {
         id: resolution.complaintId,
         title: 'Resolution Approved',
@@ -238,7 +271,7 @@ const approveResolution = catchAsync(async (req, res) => {
     sendNotification(resolution.resolvedBy.FCMToken, payload.action, JSON.stringify(payload));
 
     return res.status(200).json(
-        new ApiResponse(200, resolution, "Resolution approved successfully.")
+        new ApiResponse(200, complaint, "Resolution approved successfully.")
     );
 });
 
@@ -246,5 +279,7 @@ export {
     createTechnician,
     assignedTechnician,
     getComplaintDetails,
-    getComplaints
+    getComplaints,
+    rejectResolution,
+    approveResolution
 }

@@ -9,7 +9,7 @@ import { User } from '../models/user.model.js';
 
 const submitComplaint = catchAsync(async (req, res) => {
     const { category, description, location } = req.body;
-    const complaintId = `C${Date.now()}`;
+    const complaintId = `QRY-${Date.now()}`;
     let imageUrl = null;
     const imagePath = req.file?.path || null;
 
