@@ -11,7 +11,7 @@ const complaintSchema = new Schema({
     category: {
         type: String,
         required: true,
-        enum: ['AC', 'Light', 'Telephone', 'Technical', 'HouseKeeping', 'Carpentry', 'Danger', 'Other'],
+        enum: ['Air Conditioning', 'Electrical', 'Telephone', 'IT Support', 'Housekeeping', 'Carpentry', 'Unsafe Condition', 'Others'],
         default: 'General'
     },
 

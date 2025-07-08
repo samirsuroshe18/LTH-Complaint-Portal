@@ -8,6 +8,7 @@ import { getSectorByCategory } from '../utils/getSectorByCategory.js';
 import { User } from '../models/user.model.js';
 
 const submitComplaint = catchAsync(async (req, res) => {
+    
     const { category, description, location } = req.body;
     const complaintId = `C${Date.now()}`;
     let imageUrl = null;
@@ -24,10 +25,12 @@ const submitComplaint = catchAsync(async (req, res) => {
         location,
         createdAt: { $gte: fortyEightHoursAgo }
     });
+    
 
     if (recentComplaint) {
         throw new ApiError(429, "A complaint has already been submitted from this location within the last 48 hours. Please wait before submitting again.");
     }
+    console.log(req.body);
 
     if (imagePath) {
         const uploadResult = await uploadOnCloudinary(imagePath);
@@ -105,6 +108,7 @@ const getComplaints = catchAsync(async (req, res) => {
             { category: { $regex: req.query.search, $options: 'i' } },
             { sector: { $regex: req.query.search, $options: 'i' } },
             { location: { $regex: req.query.search, $options: 'i' } },
+            { description: { $regex: req.query.search, $options: 'i' } },
         ];
     }
 

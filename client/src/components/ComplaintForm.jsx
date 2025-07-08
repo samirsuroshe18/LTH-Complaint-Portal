@@ -8,6 +8,7 @@ import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
 import { useComplaints } from "../contexts/ComplaintContext"
+import axios from "axios"
 
 export default function ComplaintForm({ category, onBack, onSuccess }) {
   const [description, setDescription] = useState("")
@@ -16,7 +17,7 @@ export default function ComplaintForm({ category, onBack, onSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
 
-  const { addComplaint } = useComplaints()
+  const { addComplaint, refreshComplaints } = useComplaints()
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0]
@@ -33,29 +34,39 @@ export default function ComplaintForm({ category, onBack, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!description.trim()) return
-
+  
     setIsSubmitting(true)
-
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    const complaint = {
-      category,
-      description: description.trim(),
-      photo: photoPreview,
-      photoName: photo?.name,
+  
+    try {
+      const formData = new FormData()
+      formData.append("category", category)
+      formData.append("description", description.trim())
+      formData.append("location", "sixteen")
+  
+      if (photoPreview instanceof File) {
+        formData.append("file", photoPreview)
+      }
+  
+      const response = await axios.post("http://localhost:9000/api/v1/complaint/submit", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      })
+  
+      if (response.status === 201) {
+        setShowSuccess(true)
+        if (refreshComplaints) refreshComplaints();
+      } else {
+        alert("Complaint submission failed")
+      }
+    } catch (err) {
+      console.error(err)
+      alert("An error occurred while submitting the complaint")
+    } finally {
+      setIsSubmitting(false)
     }
-
-    addComplaint(complaint)
-    setIsSubmitting(false)
-    setShowSuccess(true)
-
-    // Auto redirect after success message
-    setTimeout(() => {
-      onSuccess()
-    }, 2000)
   }
-
+  
   if (showSuccess) {
     return (
       <div className="p-4 md:p-6 max-w-2xl mx-auto">

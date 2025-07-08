@@ -1,42 +1,83 @@
 "use client"
 
-import { ArrowLeft, Clock, CheckCircle, Calendar, Camera, Filter, Search, X } from "lucide-react"
-import { Button } from "./ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
-import { Badge } from "./ui/badge"
+import React, { useState, useRef, useEffect } from "react"
+import { ArrowLeft, Clock, CheckCircle, Calendar, Camera, Filter, Search as LucideSearch, X } from "lucide-react"
 import { useComplaints } from "../contexts/ComplaintContext"
-import { useState, useRef } from "react"
+
+// MUI imports
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import CardHeader from '@mui/material/CardHeader';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import Box from '@mui/material/Box';
+import Badge from '@mui/material/Badge';
+import Divider from '@mui/material/Divider';
+import Tooltip from '@mui/material/Tooltip';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import SearchIcon from '@mui/icons-material/Search';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
+import SvgIcon from '@mui/material/SvgIcon';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import NumbersIcon from '@mui/icons-material/Numbers';
+import DescriptionIcon from '@mui/icons-material/Description';
+
+// Add category color mapping (same as HomePage.jsx)
+const categoryColors = {
+  "Housekeeping": "#3b82f6", // blue-500
+  "Carpentry": "#f59e42",   // amber-500
+  "Telephone": "#06b6d4",   // cyan-500
+  "Electrical": "#fde047",  // yellow-500
+  "IT Support": "#a78bfa",  // purple-500
+  "Unsafe Condition": "#fb923c", // orange-500
+  "Air Conditioning": "#22c55e", // green-500
+  "Others": "#6b7280",      // gray-500
+};
+
+// Add MUI DatePicker imports
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 export default function HistoryPage({ onBack }) {
-  const { getPendingComplaints, getResolvedComplaints, resolveComplaint } = useComplaints()
+  console.log("HistoryPage component mounted");
+  const { complaints, fetchFilteredComplaints, loading, pagination } = useComplaints()
 
-  const allComplaints = [
-    ...getPendingComplaints(),
-    ...getResolvedComplaints(),
-  ]
+  console.log("Complaints from context:", complaints);
+
+  const allComplaints = complaints; // Use directly, or filter as needed
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [dateFilter, setDateFilter] = useState("")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
   const [showFilters, setShowFilters] = useState(false)
+  const [page, setPage] = useState(1)
   const filterRef = useRef(null)
 
-  // Filter and sort complaints
-  const filteredComplaints = allComplaints
-    .filter((complaint) => {
-      const matchesDescription = complaint.description.toLowerCase().includes(search.toLowerCase())
-      const matchesStatus = statusFilter === "all" || complaint.status === statusFilter
-      let matchesDate = true
-      if (dateFilter) {
-        const complaintDate = new Date(complaint.submittedAt)
-        const selectedDate = new Date(dateFilter)
-        matchesDate =
-          complaintDate.getFullYear() === selectedDate.getFullYear() &&
-          complaintDate.getMonth() === selectedDate.getMonth() &&
-          complaintDate.getDate() === selectedDate.getDate()
-      }
-      return matchesDescription && matchesStatus && matchesDate
+  // Fetch filtered complaints from backend whenever filters or page change
+  useEffect(() => {
+    fetchFilteredComplaints({
+      search,
+      status: statusFilter,
+      startDate,
+      endDate,
+      page,
+      limit: 10,
     })
+  }, [search, statusFilter, startDate, endDate, page])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, startDate, endDate])
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -61,141 +102,301 @@ export default function HistoryPage({ onBack }) {
     return days === 1 ? "1 day" : `${days} days`
   }
 
+  // MUI Complaint Card
   const ComplaintCard = ({ complaint }) => (
-    <Card className="mb-4">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <CardTitle className="text-lg">{complaint.title}</CardTitle>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline">{complaint.category}</Badge>
-              <Badge
-                variant={complaint.status === "pending" ? "destructive" : "default"}
-                className={complaint.status === "resolved" ? "bg-green-100 text-green-800" : ""}
-              >
-                {complaint.status === "pending" ? (
-                  <>
-                    <Clock className="w-3 h-3 mr-1" />
-                    Pending
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    Resolved
-                  </>
-                )}
-              </Badge>
-            </div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {complaint.photo && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Camera className="w-4 h-4" />
-            <span>Photo attached</span>
-          </div>
-        )}
-        <p className="text-muted-foreground">{complaint.description}</p>
-
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Calendar className="w-4 h-4" />
-            <span>Submitted: {formatDate(complaint.submittedAt)}</span>
-          </div>
-        </div>
-
-        {complaint.status === "resolved" && (
-          <div className="flex items-center gap-4 text-sm text-green-600">
-            <div className="flex items-center gap-1">
-              <CheckCircle className="w-4 h-4" />
-              <span>Resolved in {getResolutionTime(complaint.submittedAt, complaint.resolvedAt)}</span>
-            </div>
-          </div>
-        )}
+    <Card sx={{ mb: 3, boxShadow: 3, borderRadius: 3 }}>
+      <CardHeader
+        title={
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="h6">{complaint.title}</Typography>
+            <Chip 
+              label={complaint.category} 
+              variant="filled" 
+              size="small"
+              sx={{ 
+                backgroundColor: categoryColors[complaint.category] || '#e0e0e0', 
+                color: '#fff', 
+                fontWeight: 600 
+              }}
+            />
+            <Chip
+              label={complaint.status?.toLowerCase() === "resolved" ? "Resolved" : "Pending"}
+              color={complaint.status?.toLowerCase() === "resolved" ? "success" : "warning"}
+              size="small"
+              icon={complaint.status?.toLowerCase() === "resolved"
+                ? (
+                    <SvgIcon fontSize="small" sx={{ mr: 0.2 }}>
+                      <CheckCircle />
+                    </SvgIcon>
+                  )
+                : (
+                    <SvgIcon fontSize="small" sx={{ mr: 0.2 }}>
+                      <Clock />
+                    </SvgIcon>
+                  )}
+            />
+          </Stack>
+        }
+        subheader={
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+            <Box component="span" sx={{
+              display: 'flex', alignItems: 'center',
+              fontWeight: 600,
+              fontSize: '1rem',
+              background: '#f3f4f6',
+              color: 'text.primary',
+              px: 1.2,
+              py: 0.3,
+              borderRadius: 1,
+              letterSpacing: 0.5,
+              mr: 1,
+            }}>
+              <NumbersIcon sx={{ color: '#2563eb', fontSize: 18, mr: 0.5 }} /> Complaint ID:
+            </Box>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 400,
+                fontSize: '1rem',
+                background: '#f3f4f6',
+                color: 'text.primary',
+                px: 1.2,
+                py: 0.3,
+                borderRadius: 1,
+                letterSpacing: 0.5,
+              }}
+            >
+              {complaint.complaintId}
+            </Typography>
+          </Box>
+        }
+        sx={{ pb: 0 }}
+      />
+      <CardContent>
+        <Stack spacing={1}>
+          {complaint.photo && (
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Camera style={{ width: 18, height: 18 }} />
+              <Typography variant="body2" color="text.secondary">Photo attached</Typography>
+            </Stack>
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+            <Box component="span" sx={{
+              display: 'flex', alignItems: 'center',
+              fontWeight: 600,
+              fontSize: '1rem',
+              background: '#f3f4f6',
+              color: 'text.primary',
+              px: 1.2,
+              py: 0.3,
+              borderRadius: 1,
+              letterSpacing: 0.5,
+              mr: 1,
+            }}>
+              <DescriptionIcon sx={{ color: '#2563eb', fontSize: 18, mr: 0.5 }} /> Complaint:
+            </Box>
+            <Box component="span" sx={{
+              fontWeight: 400,
+              fontSize: '1.05rem',
+              color: 'text.secondary',
+              background: '#f9fafb',
+              px: 1.2,
+              py: 0.3,
+              borderRadius: 2,
+              display: 'inline-block',
+              ml: 0.5,
+            }}>{complaint.description}</Box>
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+            <Box component="span" sx={{
+              fontWeight: 600,
+              fontSize: '1rem',
+              background: '#f3f4f6',
+              color: 'text.primary',
+              px: 1.2,
+              py: 0.3,
+              borderRadius: 1,
+              letterSpacing: 0.5,
+              mr: 1,
+              display: 'flex',
+              alignItems: 'center',
+            }}>
+              <LocationOnIcon sx={{ color: '#2563eb', fontSize: 18, mr: 0.5 }} /> Location:
+            </Box>
+            <Box component="span" sx={{
+              fontWeight: 400,
+              fontSize: '1.05rem',
+              color: 'text.secondary',
+              background: '#f9fafb',
+              px: 1.2,
+              py: 0.3,
+              borderRadius: 2,
+              display: 'inline-block',
+              ml: 0.5,
+            }}>{complaint.location}</Box>
+          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Calendar style={{ width: 18, height: 18 }} />
+            <Typography variant="body2" color="text.secondary">
+              Submitted: {formatDate(complaint.createdAt)}
+            </Typography>
+          </Stack>
+          {complaint.status === "resolved" && (
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <CheckCircle style={{ width: 18, height: 18, color: '#388e3c' }} />
+              <Typography variant="body2" color="success.main">
+                Resolved in {getResolutionTime(complaint.createdAt, complaint.resolvedAt)}
+              </Typography>
+            </Stack>
+          )}
+        </Stack>
       </CardContent>
     </Card>
   )
 
-  return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground">Complaint History</h1>
-          <p className="text-muted-foreground text-sm">Track your submitted complaints</p>
-        </div>
-      </div>
+  console.log("All Complaints in HistoryPage:", allComplaints);
 
-      {/* Search and Filter Bar */}
-      <div className="flex items-center gap-2 mb-2 relative">
-        <div className="relative flex items-center" style={{ width: '100%', maxWidth: '600px' }}>
-          <input
-            type="text"
-            placeholder="Search complaints..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-4 pr-10 py-2 rounded-full border border-gray-300 shadow focus:outline-none focus:ring focus:border-blue-400 bg-white"
-          />
-          <span style={{position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)'}}>
-            <Search className="text-gray-400 w-5 h-5" />
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowFilters((v) => !v)}
-          className="p-2 border rounded-full bg-white hover:bg-gray-100 shadow"
-          ref={filterRef}
+  return (
+    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 800, mx: "auto" }}>
+      <Stack direction="row" alignItems="center" spacing={2} mb={4}>
+        {/* Add fixed left padding to ensure heading is never behind the hamburger icon */}
+        <Box sx={{ pl: { xs: 7, sm: 8, md: 10 } }}>
+          <Typography variant="h4" fontWeight={700}>Complaint History</Typography>
+          <Typography variant="subtitle2" color="text.secondary">Track your submitted complaints</Typography>
+        </Box>
+      </Stack>
+
+      {/* MUI Search and Filter Bar */}
+      <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Search complaints..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon color="action" />
+              </InputAdornment>
+            ),
+            sx: {
+              '::placeholder': {
+                color: '#6b7280', // darker placeholder
+                opacity: 1,
+                fontWeight: 500,
+              },
+            },
+          }}
+          sx={{
+            maxWidth: 600,
+            borderRadius: 3,
+            boxShadow: 2,
+            background: '#f5f7fa',
+            border: '1.5px solid #e0e7ef',
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 3,
+              background: '#f5f7fa',
+              '& fieldset': {
+                border: 'none',
+              },
+              '&:hover fieldset': {
+                border: 'none',
+              },
+              '&.Mui-focused fieldset': {
+                border: 'none',
+              },
+            },
+          }}
+        />
+        <Box
+          sx={{
+            background: '#f5f7fa',
+            border: '1.5px solid #e0e7ef',
+            borderRadius: 3,
+            boxShadow: 2,
+            ml: 1,
+            display: 'flex',
+            alignItems: 'center',
+          }}
         >
-          <Filter className="w-5 h-5 text-muted-foreground" />
-        </button>
-      </div>
+          <Tooltip title="Show Filters">
+            <IconButton onClick={() => setShowFilters(v => !v)} ref={filterRef}>
+              <FilterListIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Stack>
 
       {showFilters && (
-        <div className="w-full bg-gradient-to-br from-white to-blue-50 border rounded-xl shadow-xl p-4 mb-4" style={{ maxWidth: 600, margin: '0 auto' }}>
-          <div className="mb-4">
-            <span className="font-semibold text-lg text-blue-900 tracking-tight">Filters</span>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <label className="font-medium text-sm text-blue-900">Status</label>
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-blue-200 rounded-lg mt-1 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <div className="w-full bg-gradient-to-br from-white to-blue-50 border rounded-xl shadow-xl p-4 mb-4" style={{ maxWidth: 600, margin: '0 auto' }}>
+            <div className="mb-4">
+              <span className="font-semibold text-lg text-blue-900 tracking-tight">Filters</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <FormControl fullWidth size="small" sx={{ mt: 1, background: '#f5f7fa', borderRadius: 2, boxShadow: 1 }}>
+                  <InputLabel id="status-filter-label" sx={{ fontWeight: 600, color: '#111' }}>Status</InputLabel>
+                  <Select
+                    labelId="status-filter-label"
+                    value={statusFilter}
+                    label="Status"
+                    onChange={e => setStatusFilter(e.target.value)}
+                    sx={{
+                      borderRadius: 2,
+                      background: '#f5f7fa',
+                      fontWeight: 500,
+                      color: '#111',
+                    }}
+                  >
+                    <MenuItem value="all" sx={{ color: '#111' }}>All Statuses</MenuItem>
+                    <MenuItem value="Pending" sx={{ color: '#111' }}>Pending</MenuItem>
+                    <MenuItem value="Resolved" sx={{ color: '#111' }}>Resolved</MenuItem>
+                  </Select>
+                </FormControl>
+              </div>
+              <div className="flex-1">
+                <label className="font-medium text-sm text-blue-900">Start Date</label>
+                <DatePicker
+                  value={startDate ? new Date(startDate) : null}
+                  onChange={date => setStartDate(date ? date.toISOString().slice(0, 10) : "")}
+                  slotProps={{ textField: { fullWidth: true, size: 'small', sx: { mt: 1, background: '#fff', borderRadius: 2 } } }}
+                  format="yyyy-MM-dd"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="font-medium text-sm text-blue-900">End Date</label>
+                <DatePicker
+                  value={endDate ? new Date(endDate) : null}
+                  onChange={date => setEndDate(date ? date.toISOString().slice(0, 10) : "")}
+                  slotProps={{ textField: { fullWidth: true, size: 'small', sx: { mt: 1, background: '#fff', borderRadius: 2 } } }}
+                  format="yyyy-MM-dd"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                type="button"
+                className="px-4 py-1 rounded-full border border-blue-400 text-blue-700 bg-white hover:bg-blue-50 font-medium text-xs shadow-sm transition"
+                onClick={() => { setStatusFilter('all'); setStartDate(''); setEndDate(''); setShowFilters(false); }}
               >
-                <option value="all">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="resolved">Resolved</option>
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="font-medium text-sm text-blue-900">Date</label>
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-blue-200 rounded-lg mt-1 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
+                Clear Filters
+              </button>
             </div>
           </div>
-          <div className="flex justify-end mt-6">
-            <button
-              type="button"
-              className="px-4 py-1 rounded-full border border-blue-400 text-blue-700 bg-white hover:bg-blue-50 font-medium text-xs shadow-sm transition"
-              onClick={() => { setStatusFilter('all'); setDateFilter(''); setShowFilters(false); }}
-            >
-              Clear Filters
-            </button>
-          </div>
-        </div>
+        </LocalizationProvider>
       )}
 
       {/* All Complaints List */}
-      <div className="mt-6">
-        {filteredComplaints.length === 0 ? (
+      <Box mt={4}>
+        {loading ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <h3 className="font-medium text-foreground mb-2">Loading...</h3>
+            </CardContent>
+          </Card>
+        ) : complaints.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
               <h3 className="font-medium text-foreground mb-2">No Complaints Found</h3>
@@ -204,12 +405,34 @@ export default function HistoryPage({ onBack }) {
           </Card>
         ) : (
           <div>
-            {filteredComplaints.map((complaint) => (
-              <ComplaintCard key={complaint.id} complaint={complaint} />
+            {complaints.map((complaint) => (
+              <ComplaintCard key={complaint._id} complaint={complaint} />
             ))}
+            {/* Pagination Controls */}
+            <div className="flex items-center justify-center gap-4 mt-8">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={pagination.currentPage === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {pagination.currentPage} of {pagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                disabled={pagination.currentPage === pagination.totalPages || pagination.totalPages === 0}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }

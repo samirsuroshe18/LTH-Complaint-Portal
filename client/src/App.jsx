@@ -28,6 +28,7 @@ function App() {
   }
 
   const renderCurrentPage = () => {
+    console.log("Rendering page:", currentPage);
     switch (currentPage) {
       case "home":
         return <HomePage onCategorySelect={handleCategorySelect} />
