@@ -41,7 +41,7 @@ export default function ComplaintForm({ category, onBack, onSuccess }) {
       const formData = new FormData()
       formData.append("category", category)
       formData.append("description", description.trim())
-      formData.append("location", "sixteen")
+      formData.append("location", "seventeen")
   
       if (photoPreview instanceof File) {
         formData.append("file", photoPreview)

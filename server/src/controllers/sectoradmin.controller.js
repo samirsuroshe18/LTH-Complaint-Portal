@@ -9,6 +9,7 @@ import { generatePassword } from "../utils/generatePassword.js";
 import mailSender from "../utils/mailSender.js";
 
 const createTechnician = catchAsync(async (req, res) => {
+    console.log('Received data:', req.body);
     const { userName, email, phoneNo, technicianType } = req.body;
     const password = generatePassword();
 
@@ -37,6 +38,25 @@ const createTechnician = catchAsync(async (req, res) => {
 
     throw new ApiError(500, "Something went wrong!! An email couldn't sent to your account");
 });
+
+const getTechnician = catchAsync(async (req, res) => {
+    
+    const technicians = await User.find({
+        role:"technician",
+        createdBy: req.user._id
+    });
+
+    console.log(technicians);
+
+    if(technicians.length<=0){
+        throw new ApiError(404, "There are no technicians available for this category");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, technicians, "Technicians fetched successfully.")
+    );
+});
+
 
 const getComplaintDetails = catchAsync(async (req, res) => {
     const id = mongoose.Types.ObjectId.createFromHexString(req.params.id);
@@ -281,5 +301,6 @@ export {
     getComplaintDetails,
     getComplaints,
     rejectResolution,
-    approveResolution
+    approveResolution,
+    getTechnician
 }
