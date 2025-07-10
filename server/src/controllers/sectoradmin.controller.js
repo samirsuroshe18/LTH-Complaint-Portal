@@ -9,8 +9,7 @@ import { generatePassword } from "../utils/generatePassword.js";
 import mailSender from "../utils/mailSender.js";
 
 const createTechnician = catchAsync(async (req, res) => {
-    const { userName, email, phoneNo, technicianType } = req.body;
-    const password = generatePassword();
+    const { userName, email, phoneNo, technicianType, password } = req.body;
 
     const user = await User.create({
         userName,
@@ -19,6 +18,7 @@ const createTechnician = catchAsync(async (req, res) => {
         phoneNo,
         role: "technician",
         technicianType,
+        createdBy: req.user._id,
     });
 
     const createdUser = await User.findById(user._id);
@@ -240,9 +240,9 @@ const approveResolution = catchAsync(async (req, res) => {
     }
 
     const complaint = await Complaint.findOneAndUpdate(
-        { complaintId: req.params.id },
+        { resolution: resolution._id},
         {
-            $set: { status: "resolved" },
+            $set: { status: "Resolved" },
         },
         { new: true }  // Return the updated document
     ).
@@ -261,17 +261,35 @@ const approveResolution = catchAsync(async (req, res) => {
         throw new ApiError(404, "Complaint not found or could not be updated.");
     }
 
-    let payload = {
-        id: resolution.complaintId,
-        title: 'Resolution Approved',
-        message: 'Your submitted resolution for the complaint has been approved by the society manager.',
-        action: 'RESOLUTION_APPROVED',
-    };
+    // let payload = {
+    //     id: resolution.complaintId,
+    //     title: 'Resolution Approved',
+    //     message: 'Your submitted resolution for the complaint has been approved by the society manager.',
+    //     action: 'RESOLUTION_APPROVED',
+    // };
 
-    sendNotification(resolution.resolvedBy.FCMToken, payload.action, JSON.stringify(payload));
+    // sendNotification(resolution.resolvedBy.FCMToken, payload.action, JSON.stringify(payload));
 
     return res.status(200).json(
         new ApiResponse(200, complaint, "Resolution approved successfully.")
+    );
+});
+
+const getTechnician = catchAsync(async (req, res) => {
+    
+    const technicians = await User.find({
+        role: "technician",
+        createdBy: req.user._id
+    });
+
+    console.log(technicians);
+
+    if(technicians.length<=0){
+        throw new ApiError(404, "There are no technicians available for this category");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, technicians, "Technicians fetched successfully.")
     );
 });
 
@@ -281,5 +299,6 @@ export {
     getComplaintDetails,
     getComplaints,
     rejectResolution,
-    approveResolution
+    approveResolution,
+    getTechnician
 }

@@ -43,9 +43,14 @@ const submitComplaint = catchAsync(async (req, res) => {
         image: imageUrl || '',
     });
 
-    const fcmTokens = await User.find({ role: 'sectorAdmin', sector: complaint.sector })
-        .select('FCMToken')
+    const fcmTokens = await User.find({
+        $or: [
+            { role: 'sectoradmin', sector: complaint.sector },
+            { role: 'superadmin' }
+        ]
+    }).select('FCMToken')
         .lean();
+
 
     const tokens = fcmTokens?.map(user => user.FCMToken).filter(token => token);
 
@@ -55,15 +60,17 @@ const submitComplaint = catchAsync(async (req, res) => {
 
         const payload = {
             title,
-            message,            
-            complaintId: complaint._id,
+            message,
+            complaintId: String(complaint._id),
             category: complaint.category,
-            societyName: complaint.societyName,
-            action: "NOTIFY_NEW_COMPLAINT"
+            action: "NOTIFY_NEW_COMPLAINT",
         };
+        if (complaint?.image) {
+            payload.imageUrl = complaint.image;
+        }
 
         tokens.forEach(token => {
-            sendNotification(token, payload.action, JSON.stringify(payload));
+            sendNotification(token, payload.action, payload);
         });
     }
 

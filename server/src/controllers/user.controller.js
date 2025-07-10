@@ -3,6 +3,7 @@ dotenv.config()
 import catchAsync from '../utils/catchAsync.js';
 import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
+import mailSender from '../utils/mailSender.js';
 import { User } from '../models/user.model.js';
 
 const generateAccessAndRefreshToken = async (userId) => {
@@ -185,6 +186,42 @@ const updateFCMToken = catchAsync(async (req, res) => {
     );
 });
 
+const changeCurrentPassword = catchAsync(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    const user = await User.findById(req.user._id);
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+    if (!isPasswordCorrect) {
+        throw new ApiError(400, "Password is incorrect");
+    }
+
+    user.password = newPassword;
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json(new ApiResponse(200, {}, "Password changed successfully"));
+});
+
+const forgotPassword = catchAsync(async (req, res) => {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+        throw new ApiError(404, "Invalid email or email is not verified");
+    }
+
+    const mailResponse = await mailSender(email, "RESET", undefined, user._id);
+
+    if (mailResponse) {
+        return res.status(200).json(
+            new ApiResponse(200, {}, "An email sent to your account please reset your password in 10 minutes")
+        );
+    }
+
+    throw new ApiError(500, "Something went wrong!! An email couldn't sent to your account");
+});
+
 export {
     createSuperAdmin,
     loginUser,
@@ -192,4 +229,6 @@ export {
     getCurrentUser,
     refreshAccessToken,
     updateFCMToken,
+    changeCurrentPassword,
+    forgotPassword
 };

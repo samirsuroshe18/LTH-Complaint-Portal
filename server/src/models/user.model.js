@@ -75,7 +75,11 @@ const userSchema = new Schema({
     isActive: {
         type: Boolean,
         default: true,
-    }
+    },
+
+    forgotPasswordToken: String,
+    
+    forgotPasswordTokenExpiry: Date,
 
 }, { timestamps: true });
 

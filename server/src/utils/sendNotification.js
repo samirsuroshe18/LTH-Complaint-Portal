@@ -5,16 +5,11 @@ const sendNotification = (token, action, payload) => {
   const message = {
         token,
         notification: {
-            title: userName,
-            body: textMessage,
-            imageUrl: 'https://foo.bar.pizza-monster.png'
+            title: payload.title,
+            body: payload.message,
+            imageUrl: payload.imageUrl || undefined,
         },
-        data: {
-            userId,
-            userName,
-            textMessage,
-            profilePic
-        },
+        data: payload,
         android: {
             priority: 'high',
         },

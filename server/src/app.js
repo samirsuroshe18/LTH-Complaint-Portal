@@ -14,6 +14,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const staticPath = path.join(__dirname, '../public');
 
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, './views'));
+
 // this use for cross origin sharing 
 app.use(
   cors({
@@ -34,6 +37,7 @@ app.use(cookieParser());
 
 // routes import
 import userRouter from './routes/user.routes.js';
+import verifyRouter from './routes/verify.routes.js';
 import complaintRouter from './routes/complaint.routes.js';
 import adminRouter from './routes/admin.routes.js';
 import sectorAdminRouter from './routes/sectoradmin.routes.js';
@@ -41,6 +45,7 @@ import technicianRouter from './routes/technician.routes.js';
 
 //Routes declaration
 app.use("/api/v1/user", userRouter);
+app.use("/api/v1/verify", verifyRouter);
 app.use("/api/v1/complaint", complaintRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/sectoradmin", sectorAdminRouter);

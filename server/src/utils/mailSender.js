@@ -1,8 +1,12 @@
 import { createTransport } from 'nodemailer';
+import bcrypt from 'bcrypt';
+import { User } from '../models/user.model.js';
 
-async function mailSender(email, emailType, password = "NA") {
+async function mailSender(email, emailType, password = "NA", userId="") {
   try {
     let subject, htmlContent;
+    // Create hashed token 
+    const hashedToken = await bcrypt.hash(userId.toString(), 10);
 
     if (emailType === "VERIFY_TECHNICIAN") {
       subject = "Welcome! Your Technician Account Credentials";
@@ -56,6 +60,7 @@ async function mailSender(email, emailType, password = "NA") {
                 ⚠️ Security Guidelines
               </h4>
               <ul style="color: #856404; margin: 10px 0; padding-left: 20px;">
+                <li>Change your password after first login</li>
                 <li>Never share your admin credentials</li>
                 <li>Use secure networks for administrative tasks</li>
               </ul>
@@ -81,6 +86,22 @@ async function mailSender(email, emailType, password = "NA") {
               </p>
             </div>
           </div>
+        </div>
+      `;
+    }else if (emailType === "RESET") {
+      await User.findByIdAndUpdate(userId, { forgotPasswordToken: hashedToken, forgotPasswordTokenExpiry: Date.now() + (1000 * 60 * 10) });
+      subject = "Reset your password";
+      htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Password Reset Request</h2>
+          <p>You have requested to reset your password. Click the button below to proceed.</p>
+          <div style="margin: 30px 0;">
+            <a href="${process.env.PROD_API_URL}/api/v1/verify/reset-password?token=${hashedToken}" 
+               style="background-color: #dc3545; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+              Reset Password
+            </a>
+          </div>
+          <p style="color: #666; font-size: 14px;">If you didn't request a password reset, please ignore this email.</p>
         </div>
       `;
     }

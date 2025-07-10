@@ -6,6 +6,7 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { Resolution } from "../models/resolution.model.js";
 import mongoose from "mongoose";
 import { sendNotification } from "../utils/sendNotification.js";
+import { User } from "../models/user.model.js";
 
 const getAssignedComplaints = catchAsync(async (req, res) => {
     // Pagination parameters
@@ -66,7 +67,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
             ]
         })
-        .select("-__v -responses -adminRemark -statusUpdatedAt");
+        .select("-__v");
 
     // Apply pagination on combined results
     const response = assignedComplaints.slice(skip, skip + limit);
@@ -127,28 +128,31 @@ const addComplaintResolution = catchAsync(async (req, res) => {
         imageUrl = uploadResult.secure_url;
     }
 
-    const resolution = await Resolution.create({
-        complaintId: complaintObjectId,
-        resolutionAttachment: imageUrl || '',
-        resolutionNote,
-        resolvedBy: req.user._id,
-        resolutionSubmittedAt: new Date(),
-        status: "under_review"
-    });
+    const updateResolution = await Resolution.findOneAndUpdate(
+        { complaintId: complaintObjectId },
+        {
+            status: "under_review",
+            resolutionAttachment: imageUrl || '',
+            resolutionNote,
+            resolvedBy: req.user._id,
+            resolutionSubmittedAt: new Date(),
+        },
+        { new: true }
+    );
 
-    if (!resolution) {
-        throw new ApiError(500, "Failed to create resolution.");
+    if (!updateResolution) {
+        throw new ApiError(404, "No in-progress resolution found for this complaint.");
     }
 
     const updatedComplaint = await Complaint.findByIdAndUpdate(
         complaintObjectId,
         {
-            resolution: resolution._id,
+            status: "In Progress",
         },
         { new: true }
     )
         .populate("assignedWorker", "userName email profile role phoneNo")
-        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo FCMToken")
         .populate({
             path: 'resolution',
             populate: [
@@ -157,22 +161,25 @@ const addComplaintResolution = catchAsync(async (req, res) => {
                 { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
             ]
         })
-        .select("-__v -responses");
+        .select("-__v");
 
     if (!updatedComplaint) {
         throw new ApiError(404, "Complaint not found or could not be updated.");
     }
 
-    // let payload = {
-    //     id: updatedComplaint._id,
-    //     title: 'Resolution Submitted for Review',
-    //     message: 'A technician has submitted a resolution for a complaint. Please review and approve or reject the resolution.',
-    //     action: 'REVIEW_RESOLUTION',
-    // };
+    const adminFcmToken = await User.findOne({ role: 'superadmin' });
+    const fcmTokens = [updatedComplaint?.assignedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
 
-    // results.forEach(profile => {
-    //     sendNotification(profile.user.FCMToken, payload.action, JSON.stringify(payload));
-    // });
+    let payload = {
+        complaintId: String(updatedComplaint._id),
+        title: 'Resolution Submitted for Review',
+        message: 'A technician has submitted a resolution for a complaint. Please review and approve or reject the resolution.',
+        action: 'REVIEW_RESOLUTION',
+    };
+
+    fcmTokens.forEach(token => {
+        sendNotification(token, payload.action, payload);
+    });
 
     return res.status(200).json(
         new ApiResponse(200, updatedComplaint, "Complaint resolution added successfully.")
@@ -183,9 +190,22 @@ const startWorkingOnComplaint = catchAsync(async (req, res) => {
     const { id } = req.params;
     const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(id);
 
+    const createResolution = await Resolution.create({
+        complaintId: complaintObjectId,
+        status: "in_progress",
+        complaintId: complaintObjectId,
+    });
+
+    if (!createResolution) {
+        throw new ApiError(500, "Failed to create resolution for the complaint.");
+    }
+
     const updatedComplaint = await Complaint.findByIdAndUpdate(
         complaintObjectId,
-        { status: "In Progress" },
+        {
+            status: "In Progress",
+            resolution: createResolution._id,
+        },
         { new: true }
     ).populate("assignedWorker", "userName email profile role phoneNo")
         .populate("assignedBy", "userName email profile role phoneNo")
@@ -196,7 +216,7 @@ const startWorkingOnComplaint = catchAsync(async (req, res) => {
                 { path: 'approvedBy', select: 'userName email profile role phoneNo' },
                 { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
             ]
-        }).select("-__v -responses");
+        }).select("-__v");
 
     if (!updatedComplaint) {
         throw new ApiError(404, "Complaint not found or could not be updated.");
