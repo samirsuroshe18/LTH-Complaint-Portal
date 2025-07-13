@@ -72,6 +72,15 @@ const userSchema = new Schema({
         type: Date,
     },
 
+    lastLogout: {
+        type: Date,
+    },
+
+    isLoggedIn: {
+        type: Boolean,
+        default: false,
+    },
+
     isActive: {
         type: Boolean,
         default: true,

@@ -5,59 +5,29 @@ import { Resolution } from "../models/resolution.model.js";
 import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import catchAsync from "../utils/catchAsync.js";
-import { generatePassword } from "../utils/generatePassword.js";
 import mailSender from "../utils/mailSender.js";
+import { sendNotification } from "../utils/sendNotification.js";
 
-const createTechnician = catchAsync(async (req, res) => {
-    const { userName, email, phoneNo, technicianType, password } = req.body;
+const getDashboardOverview = catchAsync(async (req, res) => {
+    // 1. Total active technicians
+    const technician = await User.find({ role: 'technician', createdBy: req.user._id, isActive: true });
+    const totalTechnician = technician.length;
 
-    const user = await User.create({
-        userName,
-        email,
-        password,
-        phoneNo,
-        role: "technician",
-        technicianType,
-        createdBy: req.user._id,
-    });
+    // 2. Total complaints by status
+    const pendingQueries = await Complaint.countDocuments({ status: 'Pending', sector: req.user.sectorType });
+    const resolvedQueries = await Complaint.countDocuments({ status: 'Resolved', sector: req.user.sectorType });
+    const inProgressQueries = await Complaint.countDocuments({ status: 'In Progress', sector: req.user.sectorType });
+    const rejectedQueries = await Complaint.countDocuments({ status: 'Rejected', sector: req.user.sectorType });
 
-    const createdUser = await User.findById(user._id);
-
-    if (!createdUser) {
-        throw new ApiError(500, "Something went wrong");
-    }
-
-    const mailResponse = await mailSender(email, "VERIFY_TECHNICIAN", password);
-
-    if (mailResponse) {
-        return res.status(200).json(
-            new ApiResponse(200, createdUser, "Technician created successfully. An email has been sent to the technician's account with the credentials.")
-        );
-    }
-
-    throw new ApiError(500, "Something went wrong!! An email couldn't sent to your account");
-});
-
-const getComplaintDetails = catchAsync(async (req, res) => {
-    const id = mongoose.Types.ObjectId.createFromHexString(req.params.id);
-    const complaint = await Complaint.findById(id)
-        .populate("assignedWorker", "userName email profile role phoneNo")
-        .populate("assignedBy", "userName email profile role phoneNo")
-        .populate({
-            path: 'resolution',
-            populate: [
-                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
-            ]
-        });
-
-    if (!complaint) {
-        throw new ApiError(404, "Complaint not found");
-    }
-
+    // ✅ Return summary
     return res.status(200).json(
-        new ApiResponse(200, complaint, "Complaint details fetched successfully")
+        new ApiResponse(200, {
+            totalTechnician,
+            pendingQueries,
+            resolvedQueries,
+            inProgressQueries,
+            rejectedQueries
+        }, "Dashboard overview fetched successfully.")
     );
 });
 
@@ -108,9 +78,18 @@ const getComplaints = catchAsync(async (req, res) => {
     const totalPages = Math.ceil(totalCount / limit);
 
     const updatedComplaint = await Complaint.find(complaintMatch)
-        .sort({ createdAt: -1 }) // Sort by newest complaint first
-        .populate("responses.responseBy", "userName email profile role phoneNo")
-        .populate("raisedBy", "userName email profile role phoneNo");
+        .sort({ createdAt: -1 })
+        .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        })
+        .select("-__v");
 
     // Apply pagination on combined results
     const response = updatedComplaint.slice(skip, skip + limit);
@@ -134,6 +113,171 @@ const getComplaints = catchAsync(async (req, res) => {
     );
 });
 
+const getComplaintDetails = catchAsync(async (req, res) => {
+    const id = mongoose.Types.ObjectId.createFromHexString(req.params.id);
+
+    const complaint = await Complaint.findById(id)
+        .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        });
+
+    if (!complaint) {
+        throw new ApiError(404, "Complaint not found");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, complaint, "Complaint details fetched successfully")
+    );
+});
+
+const createTechnician = catchAsync(async (req, res) => {
+    const { userName, email, phoneNo, technicianType, password } = req.body;
+
+    const user = await User.create({
+        userName,
+        email,
+        password,
+        phoneNo,
+        role: "technician",
+        technicianType,
+        createdBy: req.user._id,
+    });
+
+    const createdUser = await User.findById(user._id);
+
+    if (!createdUser) {
+        throw new ApiError(500, "Something went wrong");
+    }
+
+    const mailResponse = await mailSender(email, "VERIFY_TECHNICIAN", password);
+
+    if (mailResponse) {
+        return res.status(200).json(
+            new ApiResponse(200, createdUser, "Technician created successfully. An email has been sent to the technician's account with the credentials.")
+        );
+    }
+
+    throw new ApiError(500, "Something went wrong!! An email couldn't sent to your account");
+});
+
+const getTechnician = catchAsync(async (req, res) => {
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Filter parameters
+    const filters = {};
+
+    // Name/keyword search
+    if (req.query.search) {
+        filters.$or = [
+            { userName: { $regex: req.query.search, $options: 'i' } },
+            { email: { $regex: req.query.search, $options: 'i' } },
+            { phoneNo: { $regex: req.query.search, $options: 'i' } },
+            { technicianType: { $regex: req.query.search, $options: 'i' } },
+        ];
+    }
+
+    // Base match conditions for DeliveryEntry
+    const technicianMatch = {
+        role: "technician",
+        createdBy: req.user._id,
+        ...filters
+    };
+
+    // Count total documents for pagination
+    const totalCount = await Complaint.countDocuments(technicianMatch);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const technicians = await User.find(technicianMatch).select("-password -refreshToken -FCMToken -__v");
+
+    const response = technicians.slice(skip, skip + limit);
+
+    if (response.length <= 0) {
+        throw new ApiError(404, "No technicians found matching your criteria");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            technician: response,
+            pagination: {
+                totalEntries: totalCount,
+                entriesPerPage: limit,
+                currentPage: page,
+                totalPages: totalPages,
+                hasMore: page < totalPages
+            }
+        }, "Technicians fetched successfully.")
+    );
+});
+
+const removeTechnician = catchAsync(async (req, res) => {
+    const { id } = req.body;
+    const userId = mongoose.Types.ObjectId.createFromHexString(id);
+
+    const isRemovedTechnician = await User.deleteOne({ _id: userId, role: "technician" });
+
+    if (!isRemovedTechnician) {
+        throw new ApiError(500, "something went wrong");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, {}, "Technician removed successfully.")
+    );
+});
+
+const changeTechnicianState = catchAsync(async (req, res) => {
+    const { id } = req.body;
+    const userId = mongoose.Types.ObjectId.createFromHexString(id);
+
+    // Step 1: Fetch current user
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Step 2: Toggle the value
+    const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { isActive: !user.isActive }, // Toggle value
+        { new: true }
+    );
+
+    if (!updatedUser) {
+        throw new ApiError(500, "something went wrong");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, updatedUser, `Technician ${updatedUser.isActive ? 'activated' : 'deactivated'} successfully.`)
+    );
+});
+
+const getSelectionTechnician = catchAsync(async (req, res) => {
+    const { technicianType } = req.params;
+
+    const technicians = await User.find({
+        role: "technician",
+        technicianType
+    });
+
+    if (technicians.length <= 0) {
+        throw new ApiError(404, "There are no technicians available for this category");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, technicians, "Technicians fetched successfully.")
+    );
+});
+
 const assignedTechnician = catchAsync(async (req, res) => {
     const { complaintId, assignedWorker } = req.body;
     const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
@@ -152,6 +296,7 @@ const assignedTechnician = catchAsync(async (req, res) => {
     complaint.assignedWorker = technician._id;
     complaint.assignStatus = "assigned";
     complaint.assignedBy = req.user._id;
+    complaint.status = "In Progress";
     complaint.assignedAt = new Date();
 
     const updatedComplaint = await complaint.save({ validateBeforeSave: false });
@@ -177,14 +322,14 @@ const assignedTechnician = catchAsync(async (req, res) => {
     }
 
     let payload = {
-        id: response._id,
+        complaintId: String(response._id),
         title: 'New Complaint Assigned',
         message: 'You have been assigned a new complaint. Please review the details, address the issue, and submit your resolution promptly.',
-        action: 'ASSIGN_COMPLAINT',
+        action: 'NOTIFY_ASSIGN_COMPLAINT',
     };
 
     if (technician?.FCMToken) {
-        sendNotification(technician.FCMToken, payload.action, JSON.stringify(payload));
+        sendNotification(technician.FCMToken, payload.action, payload);
     }
 
     return res.status(200).json(
@@ -209,22 +354,44 @@ const rejectResolution = catchAsync(async (req, res) => {
         throw new ApiError(404, "Resolution not found or could not be updated.");
     }
 
+    const complaint = await Complaint.findOneAndUpdate(
+        { resolution: resolution._id },
+        {
+            $set: { status: "Rejected" },
+        },
+        { new: true }  // Return the updated document
+    ).
+        populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        });
+
+    if (!complaint) {
+        throw new ApiError(404, "Complaint not found or could not be updated.");
+    }
+
     let payload = {
-        id: resolution.complaintId,
+        complaintId: String(resolution.complaintId),
         title: 'Resolution Rejected',
         message: 'Your resolution for the complaint has been rejected. Please review the feedback and submit an updated resolution.',
         action: 'RESOLUTION_REJECTED',
     };
 
-    sendNotification(resolution.resolvedBy.FCMToken, payload.action, JSON.stringify(payload));
+    sendNotification(resolution.resolvedBy.FCMToken, payload.action, payload);
 
     return res.status(200).json(
-        new ApiResponse(200, resolution, "Resolution rejected successfully.")
+        new ApiResponse(200, complaint, "Resolution rejected successfully.")
     );
 });
 
 const approveResolution = catchAsync(async (req, res) => {
-    const { resolutionId } = req.body;
+    const { resolutionId } = req.params;
 
     const resolution = await Resolution.findByIdAndUpdate(
         resolutionId,
@@ -240,7 +407,7 @@ const approveResolution = catchAsync(async (req, res) => {
     }
 
     const complaint = await Complaint.findOneAndUpdate(
-        { resolution: resolution._id},
+        { resolution: resolution._id },
         {
             $set: { status: "Resolved" },
         },
@@ -261,44 +428,96 @@ const approveResolution = catchAsync(async (req, res) => {
         throw new ApiError(404, "Complaint not found or could not be updated.");
     }
 
-    // let payload = {
-    //     id: resolution.complaintId,
-    //     title: 'Resolution Approved',
-    //     message: 'Your submitted resolution for the complaint has been approved by the society manager.',
-    //     action: 'RESOLUTION_APPROVED',
-    // };
+    const adminFcmToken = await User.findOne({ role: 'superadmin' });
+    const fcmTokens = [resolution?.resolvedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
 
-    // sendNotification(resolution.resolvedBy.FCMToken, payload.action, JSON.stringify(payload));
+    let payload = {
+        complaintId: String(resolution.complaintId),
+        title: 'Resolution Approved',
+        message: 'Your submitted resolution for the complaint has been approved by the society manager.',
+        action: 'RESOLUTION_APPROVED',
+    };
+
+    fcmTokens.forEach(token => {
+        sendNotification(token, payload.action, payload);
+    });
 
     return res.status(200).json(
         new ApiResponse(200, complaint, "Resolution approved successfully.")
     );
 });
 
-const getTechnician = catchAsync(async (req, res) => {
-    
-    const technicians = await User.find({
-        role: "technician",
-        createdBy: req.user._id
-    });
+const reopenComplaint = catchAsync(async (req, res) => {
+    const { complaintId } = req.params;
+    const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
 
-    console.log(technicians);
+    const updateResolution = await Resolution.findOneAndUpdate(
+        { complaintId: complaintObjectId },
+        {
+            status: "under_review",
+        },
+        { new: true }
+    );
 
-    if(technicians.length<=0){
-        throw new ApiError(404, "There are no technicians available for this category");
+    if (!updateResolution) {
+        throw new ApiError(404, "No in-progress resolution found for this complaint.");
     }
 
+    const updatedComplaint = await Complaint.findByIdAndUpdate(
+        complaintObjectId,
+        {
+            status: "In Progress",
+        },
+        { new: true }
+    )
+        .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo FCMToken")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        })
+        .select("-__v");
+
+    if (!updatedComplaint) {
+        throw new ApiError(404, "Complaint not found or could not be updated.");
+    }
+
+    const adminFcmToken = await User.findOne({ role: 'superadmin' });
+    const fcmTokens = [updatedComplaint?.assignedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
+
+    let payload = {
+        complaintId: String(updatedComplaint._id),
+        title: 'Complaint Reopened',
+        message: 'A previously resolved complaint has been reopened and requires further action.',
+        action: 'REOPEN_COMPLAINT',
+    };
+
+    fcmTokens.forEach(token => {
+        if (!token === req.user.FCMToken) {
+            sendNotification(token, payload.action, payload);
+        }
+    });
+
     return res.status(200).json(
-        new ApiResponse(200, technicians, "Technicians fetched successfully.")
+        new ApiResponse(200, updatedComplaint, "Complaint reopened successfully.")
     );
 });
 
 export {
-    createTechnician,
-    assignedTechnician,
-    getComplaintDetails,
+    getDashboardOverview,
     getComplaints,
+    getComplaintDetails,
+    createTechnician,
+    getTechnician,
+    removeTechnician,
+    changeTechnicianState,
+    getSelectionTechnician,
+    assignedTechnician,
     rejectResolution,
     approveResolution,
-    getTechnician
+    reopenComplaint
 }

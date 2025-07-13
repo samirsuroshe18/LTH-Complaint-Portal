@@ -76,7 +76,7 @@ const loginUser = catchAsync(async (req, res) => {
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
     user.FCMToken = FCMToken;
     user.lastLogin = new Date();
-    user.isActive = true;
+    user.isLoggedIn = true;
     await user.save({ validateBeforeSave: false });
 
     //option object is created beacause we dont want to modified the cookie to front side
@@ -111,7 +111,11 @@ const logoutUser = catchAsync(async (req, res) => {
         {
             $unset: {
                 refreshToken: 1,
-                FCMToken: 1
+                FCMToken: 1,
+            },
+            $set: {
+                isLoggedIn: false,
+                lastLogout: new Date()
             }
         },
         {

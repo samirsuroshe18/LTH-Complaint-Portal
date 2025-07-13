@@ -3,18 +3,20 @@ import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import { Complaint } from '../models/complaint.model.js';
 import { uploadOnCloudinary } from '../utils/cloudinary.js';
-import { sendNotification } from '../utils/sendNotification.js'
+import { sendNotification } from '../utils/sendNotification.js';
 import { getSectorByCategory } from '../utils/getSectorByCategory.js';
 import { User } from '../models/user.model.js';
+import { locationIdToName } from '../utils/locationIdToName.js';
 
 const submitComplaint = catchAsync(async (req, res) => {
-    const { category, description, location } = req.body;
+    const { category, description, locationId } = req.body;
+    const location = locationIdToName(locationId);
     const complaintId = `QRY-${Date.now()}`;
     let imageUrl = null;
     const imagePath = req.file?.path || null;
 
     if (!category || !location || !description) {
-        throw new ApiError(400, "Category, location, and description are required fields.");
+        throw new ApiError(400, "Category, location, and description are required fields.", imagePath);
     }
 
     // Block repeat complaints from the same location within 48 hours
@@ -26,7 +28,7 @@ const submitComplaint = catchAsync(async (req, res) => {
     });
 
     if (recentComplaint) {
-        throw new ApiError(429, "A complaint has already been submitted from this location within the last 48 hours. Please wait before submitting again.");
+        throw new ApiError(429, "A complaint has already been submitted from this location within the last 48 hours. Please wait before submitting again.", imagePath);
     }
 
     if (imagePath) {
@@ -112,6 +114,7 @@ const getComplaints = catchAsync(async (req, res) => {
             { category: { $regex: req.query.search, $options: 'i' } },
             { sector: { $regex: req.query.search, $options: 'i' } },
             { location: { $regex: req.query.search, $options: 'i' } },
+            { description: { $regex: req.query.search, $options: 'i' } },
         ];
     }
 

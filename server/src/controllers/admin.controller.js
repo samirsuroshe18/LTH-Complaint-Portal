@@ -8,182 +8,6 @@ import mailSender from '../utils/mailSender.js';
 import { Resolution } from '../models/resolution.model.js';
 import { sendNotification } from '../utils/sendNotification.js';
 
-const getComplaints = catchAsync(async (req, res) => {
-    // Pagination parameters
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    // Filter parameters
-    const filters = {};
-
-    // Date range filter
-    if (req.query.startDate && req.query.endDate) {
-        const startDate = new Date(req.query.startDate);
-        const endDate = new Date(req.query.endDate);
-        endDate.setHours(23, 59, 59, 999);
-
-        filters.createdAt = {
-            $gte: startDate,
-            $lte: endDate
-        };
-    }
-
-    // Entry type filter
-    if (req.query.status) {
-        filters.status = req.query.status;
-    }
-
-    // Name/keyword search
-    if (req.query.search) {
-        filters.$or = [
-            { complaintId: { $regex: req.query.search, $options: 'i' } },
-            { category: { $regex: req.query.search, $options: 'i' } },
-            { location: { $regex: req.query.search, $options: 'i' } },
-            { sector: { $regex: req.query.search, $options: 'i' } }
-        ];
-    }
-
-    // Base match conditions for DeliveryEntry
-    const complaintMatch = {
-        ...filters
-    };
-
-    // Count total documents for pagination
-    const totalCount = await Complaint.countDocuments(complaintMatch);
-    const totalPages = Math.ceil(totalCount / limit);
-
-    const updatedComplaint = await Complaint.find(complaintMatch)
-        .sort({ createdAt: -1 })
-        .populate("assignedWorker", "userName email profile role phoneNo")
-        .populate("assignedBy", "userName email profile role phoneNo")
-        .populate({
-            path: 'resolution',
-            populate: [
-                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
-            ]
-        })
-        .select("-__v");
-
-    // Apply pagination on combined results
-    const response = updatedComplaint.slice(skip, skip + limit);
-
-    if (response.length <= 0) {
-        throw new ApiError(404, "No entries found matching your criteria");
-    }
-
-    return res.status(200).json(
-        new ApiResponse(200, {
-            adminComplaints: response,
-            pagination: {
-                totalEntries: totalCount,
-                entriesPerPage: limit,
-                currentPage: page,
-                totalPages: totalPages,
-                hasMore: page < totalPages
-            }
-        }, "Complaints fetched successfully.")
-    );
-});
-
-const createSectorAdmin = catchAsync(async (req, res) => {
-    const { userName, email, phoneNo, sectorType, password } = req.body;
-
-    const user = await User.create({
-        userName,
-        email,
-        password,
-        phoneNo,
-        role: "sectoradmin",
-        sectorType,
-        createdBy: req.user._id
-    });
-
-    const createdUser = await User.findById(user._id);
-
-    if (!createdUser) {
-        throw new ApiError(500, "Something went wrong");
-    }
-
-    const mailResponse = await mailSender(email, "VERIFY_SECTOR_ADMIN", password);
-
-    if (mailResponse) {
-        return res.status(200).json(
-            new ApiResponse(200, createdUser, "Sector Admin created successfully. An email has been sent to the user with login credentials.")
-        );
-    }
-
-    throw new ApiError(500, "Something went wrong!! An email couldn't sent to your account");
-});
-
-const getAllSectorAdmin = catchAsync(async (req, res) => {
-    // Pagination parameters
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    // Filter parameters
-    const filters = {};
-
-    // Name/keyword search
-    if (req.query.search) {
-        filters.$or = [
-            { userName: { $regex: req.query.search, $options: 'i' } },
-            { email: { $regex: req.query.search, $options: 'i' } },
-            { phoneNo: { $regex: req.query.search, $options: 'i' } },
-            { sectorType: { $regex: req.query.search, $options: 'i' } },
-        ];
-    }
-
-    // Base match conditions for DeliveryEntry
-    const sectoradminMatch = {
-        role: "sectoradmin",
-        ...filters
-    };
-
-    // Count total documents for pagination
-    const totalCount = await Complaint.countDocuments(sectoradminMatch);
-    const totalPages = Math.ceil(totalCount / limit);
-
-    const sectoradmins = await User.find(sectoradminMatch).select("-password -refreshToken -FCMToken -__v");
-
-    const response = sectoradmins.slice(skip, skip + limit);
-
-    if (response.length <= 0) {
-        throw new ApiError(404, "No entries found matching your criteria");
-    }
-
-    return res.status(200).json(
-        new ApiResponse(200, {
-            sectoradmins: response,
-            pagination: {
-                totalEntries: totalCount,
-                entriesPerPage: limit,
-                currentPage: page,
-                totalPages: totalPages,
-                hasMore: page < totalPages
-            }
-        }, "Sector Admins fetched successfully.")
-    );
-});
-
-const removeSectorAdmin = catchAsync(async (req, res) => {
-    const { id } = req.body;
-    const userId = mongoose.Types.ObjectId.createFromHexString(id);
-
-    const isRemovedAdmin = await User.deleteOne({ _id: userId, userType: "sectoradmin" });
-
-    if (!isRemovedAdmin) {
-        throw new ApiError(500, "something went wrong");
-    }
-
-    return res.status(200).json(
-        new ApiResponse(200, {}, "Sector Admin removed successfully.")
-    );
-});
-
 const getActiveSectorsGrouped = catchAsync(async (req, res) => {
     // Pagination parameters
     const page = parseInt(req.query.page) || 1;
@@ -286,6 +110,8 @@ const getDashboardOverview = catchAsync(async (req, res) => {
     // 2. Total complaints by status
     const pendingQueries = await Complaint.countDocuments({ status: 'Pending' });
     const resolvedQueries = await Complaint.countDocuments({ status: 'Resolved' });
+    const inProgressQueries = await Complaint.countDocuments({ status: 'In Progress' });
+    const rejectedQueries = await Complaint.countDocuments({ status: 'Rejected' });
 
     // 3. Active sectors — based on unique sector types assigned to active sector admins
     const activeSectorsSet = new Set(sectorAdmins.map(admin => admin.sectorType));
@@ -297,13 +123,96 @@ const getDashboardOverview = catchAsync(async (req, res) => {
             totalSectorAdmins,
             pendingQueries,
             resolvedQueries,
-            totalActiveSectors
+            totalActiveSectors,
+            inProgressQueries,
+            rejectedQueries
         }, "Dashboard overview fetched successfully.")
+    );
+});
+
+const getComplaints = catchAsync(async (req, res) => {
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Filter parameters
+    const filters = {};
+
+    // Date range filter
+    if (req.query.startDate && req.query.endDate) {
+        const startDate = new Date(req.query.startDate);
+        const endDate = new Date(req.query.endDate);
+        endDate.setHours(23, 59, 59, 999);
+
+        filters.createdAt = {
+            $gte: startDate,
+            $lte: endDate
+        };
+    }
+
+    // Entry type filter
+    if (req.query.status) {
+        filters.status = req.query.status;
+    }
+
+    // Name/keyword search
+    if (req.query.search) {
+        filters.$or = [
+            { complaintId: { $regex: req.query.search, $options: 'i' } },
+            { category: { $regex: req.query.search, $options: 'i' } },
+            { location: { $regex: req.query.search, $options: 'i' } },
+            { sector: { $regex: req.query.search, $options: 'i' } }
+        ];
+    }
+
+    // Base match conditions for DeliveryEntry
+    const complaintMatch = {
+        ...filters
+    };
+
+    // Count total documents for pagination
+    const totalCount = await Complaint.countDocuments(complaintMatch);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const updatedComplaint = await Complaint.find(complaintMatch)
+        .sort({ createdAt: -1 })
+        .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        })
+        .select("-__v");
+
+    // Apply pagination on combined results
+    const response = updatedComplaint.slice(skip, skip + limit);
+
+    if (response.length <= 0) {
+        throw new ApiError(404, "No entries found matching your criteria");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            adminComplaints: response,
+            pagination: {
+                totalEntries: totalCount,
+                entriesPerPage: limit,
+                currentPage: page,
+                totalPages: totalPages,
+                hasMore: page < totalPages
+            }
+        }, "Complaints fetched successfully.")
     );
 });
 
 const getComplaintDetails = catchAsync(async (req, res) => {
     const id = mongoose.Types.ObjectId.createFromHexString(req.params.id);
+
     const complaint = await Complaint.findById(id)
         .populate("assignedWorker", "userName email profile role phoneNo")
         .populate("assignedBy", "userName email profile role phoneNo")
@@ -326,114 +235,126 @@ const getComplaintDetails = catchAsync(async (req, res) => {
     );
 });
 
-const rejectResolution = catchAsync(async (req, res) => {
-    const { resolutionId, rejectedNote } = req.body;
+const createSectorAdmin = catchAsync(async (req, res) => {
+    const { userName, email, phoneNo, sectorType, password } = req.body;
 
-    const resolution = await Resolution.findByIdAndUpdate(
-        resolutionId,
-        {
-            status: "rejected",
-            rejectedNote: rejectedNote,
-            rejectedBy: req.user._id
-        },
-        { new: true }
-    ).populate("resolvedBy", "userName email profile role phoneNo FCMToken");
+    const user = await User.create({
+        userName,
+        email,
+        password,
+        phoneNo,
+        role: "sectoradmin",
+        sectorType,
+        createdBy: req.user._id
+    });
 
-    if (!resolution) {
-        throw new ApiError(404, "Resolution not found or could not be updated.");
+    const createdUser = await User.findById(user._id);
+
+    if (!createdUser) {
+        throw new ApiError(500, "Something went wrong");
     }
 
-    const complaint = await Complaint.findOneAndUpdate(
-        { resolution: resolution._id },
-        {
-            $set: { status: "Rejected" },
-        },
-        { new: true }  // Return the updated document
-    ).
-        populate("assignedWorker", "userName email profile role phoneNo")
-        .populate("assignedBy", "userName email profile role phoneNo")
-        .populate({
-            path: 'resolution',
-            populate: [
-                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
-            ]
-        });
+    const mailResponse = await mailSender(email, "VERIFY_SECTOR_ADMIN", password);
 
-    if (!complaint) {
-        throw new ApiError(404, "Complaint not found or could not be updated.");
+    if (mailResponse) {
+        return res.status(200).json(
+            new ApiResponse(200, createdUser, "Sector Admin created successfully. An email has been sent to the user with login credentials.")
+        );
     }
 
-    let payload = {
-        complaintId: String(resolution.complaintId),
-        title: 'Resolution Rejected',
-        message: 'Your resolution for the complaint has been rejected. Please review the feedback and submit an updated resolution.',
-        action: 'RESOLUTION_REJECTED',
+    throw new ApiError(500, "Something went wrong!! An email couldn't sent to your account");
+});
+
+const getAllSectorAdmin = catchAsync(async (req, res) => {
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Filter parameters
+    const filters = {};
+
+    // Name/keyword search
+    if (req.query.search) {
+        filters.$or = [
+            { userName: { $regex: req.query.search, $options: 'i' } },
+            { email: { $regex: req.query.search, $options: 'i' } },
+            { phoneNo: { $regex: req.query.search, $options: 'i' } },
+            { sectorType: { $regex: req.query.search, $options: 'i' } },
+        ];
+    }
+
+    // Base match conditions for DeliveryEntry
+    const sectoradminMatch = {
+        role: "sectoradmin",
+        ...filters
     };
 
-    sendNotification(resolution.resolvedBy.FCMToken, payload.action, payload);
+    // Count total documents for pagination
+    const totalCount = await Complaint.countDocuments(sectoradminMatch);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const sectoradmins = await User.find(sectoradminMatch).select("-password -refreshToken -FCMToken -__v");
+
+    const response = sectoradmins.slice(skip, skip + limit);
+
+    if (response.length <= 0) {
+        throw new ApiError(404, "No entries found matching your criteria");
+    }
 
     return res.status(200).json(
-        new ApiResponse(200, complaint, "Resolution rejected successfully.")
+        new ApiResponse(200, {
+            sectoradmins: response,
+            pagination: {
+                totalEntries: totalCount,
+                entriesPerPage: limit,
+                currentPage: page,
+                totalPages: totalPages,
+                hasMore: page < totalPages
+            }
+        }, "Sector Admins fetched successfully.")
     );
 });
 
-const approveResolution = catchAsync(async (req, res) => {
-    const { resolutionId } = req.params;
-    console.log("Resolution ID:", resolutionId);
+const removeSectorAdmin = catchAsync(async (req, res) => {
+    const { id } = req.body;
+    const userId = mongoose.Types.ObjectId.createFromHexString(id);
 
-    const resolution = await Resolution.findByIdAndUpdate(
-        resolutionId,
-        {
-            status: "approved",
-            approvedBy: req.user._id
-        },
-        { new: true }
-    ).populate("resolvedBy", "userName email profile role phoneNo FCMToken");
+    const isRemovedAdmin = await User.deleteOne({ _id: userId, role: "sectoradmin" });
 
-    if (!resolution) {
-        throw new ApiError(404, "Resolution not found or could not be updated.");
+    if (!isRemovedAdmin) {
+        throw new ApiError(500, "something went wrong");
     }
-
-    const complaint = await Complaint.findOneAndUpdate(
-        { resolution: resolution._id },
-        {
-            $set: { status: "Resolved" },
-        },
-        { new: true }  // Return the updated document
-    ).
-        populate("assignedWorker", "userName email profile role phoneNo")
-        .populate("assignedBy", "userName email profile role phoneNo")
-        .populate({
-            path: 'resolution',
-            populate: [
-                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
-            ]
-        });
-
-    if (!complaint) {
-        throw new ApiError(404, "Complaint not found or could not be updated.");
-    }
-
-    const adminFcmToken = await User.findOne({ role: 'superadmin' });
-    const fcmTokens = [resolution?.resolvedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
-
-    let payload = {
-        complaintId: String(resolution.complaintId),
-        title: 'Resolution Approved',
-        message: 'Your submitted resolution for the complaint has been approved by the society manager.',
-        action: 'RESOLUTION_APPROVED',
-    };
-
-    fcmTokens.forEach(token => {
-        sendNotification(token, payload.action, payload);
-    });
 
     return res.status(200).json(
-        new ApiResponse(200, complaint, "Resolution approved successfully.")
+        new ApiResponse(200, {}, "Sector Admin removed successfully.")
+    );
+});
+
+const deactivateSectorAdmin = catchAsync(async (req, res) => {
+    const { id } = req.body;
+    const userId = mongoose.Types.ObjectId.createFromHexString(id);
+
+    // Step 1: Fetch current user
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Step 2: Toggle the value
+    const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { isActive: !user.isActive }, // Toggle value
+        { new: true }
+    );
+
+    if (!updatedUser) {
+        throw new ApiError(500, "something went wrong");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, updatedUser, `Sector Admin ${updatedUser.isActive ? 'activated' : 'deactivated'} successfully.`)
     );
 });
 
@@ -513,6 +434,116 @@ const assignedTechnician = catchAsync(async (req, res) => {
     );
 });
 
+const rejectResolution = catchAsync(async (req, res) => {
+    const { resolutionId, rejectedNote } = req.body;
+
+    const resolution = await Resolution.findByIdAndUpdate(
+        resolutionId,
+        {
+            status: "rejected",
+            rejectedNote: rejectedNote,
+            rejectedBy: req.user._id
+        },
+        { new: true }
+    ).populate("resolvedBy", "userName email profile role phoneNo FCMToken");
+
+    if (!resolution) {
+        throw new ApiError(404, "Resolution not found or could not be updated.");
+    }
+
+    const complaint = await Complaint.findOneAndUpdate(
+        { resolution: resolution._id },
+        {
+            $set: { status: "Rejected" },
+        },
+        { new: true }  // Return the updated document
+    ).
+        populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        });
+
+    if (!complaint) {
+        throw new ApiError(404, "Complaint not found or could not be updated.");
+    }
+
+    let payload = {
+        complaintId: String(resolution.complaintId),
+        title: 'Resolution Rejected',
+        message: 'Your resolution for the complaint has been rejected. Please review the feedback and submit an updated resolution.',
+        action: 'RESOLUTION_REJECTED',
+    };
+
+    sendNotification(resolution.resolvedBy.FCMToken, payload.action, payload);
+
+    return res.status(200).json(
+        new ApiResponse(200, complaint, "Resolution rejected successfully.")
+    );
+});
+
+const approveResolution = catchAsync(async (req, res) => {
+    const { resolutionId } = req.params;
+
+    const resolution = await Resolution.findByIdAndUpdate(
+        resolutionId,
+        {
+            status: "approved",
+            approvedBy: req.user._id
+        },
+        { new: true }
+    ).populate("resolvedBy", "userName email profile role phoneNo FCMToken");
+
+    if (!resolution) {
+        throw new ApiError(404, "Resolution not found or could not be updated.");
+    }
+
+    const complaint = await Complaint.findOneAndUpdate(
+        { resolution: resolution._id },
+        {
+            $set: { status: "Resolved" },
+        },
+        { new: true }  // Return the updated document
+    ).
+        populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("assignedBy", "userName email profile role phoneNo")
+        .populate({
+            path: 'resolution',
+            populate: [
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
+            ]
+        });
+
+    if (!complaint) {
+        throw new ApiError(404, "Complaint not found or could not be updated.");
+    }
+
+    const adminFcmToken = await User.findOne({ role: 'superadmin' });
+    const fcmTokens = [resolution?.resolvedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
+
+    let payload = {
+        complaintId: String(resolution.complaintId),
+        title: 'Resolution Approved',
+        message: 'Your submitted resolution for the complaint has been approved by the society manager.',
+        action: 'RESOLUTION_APPROVED',
+    };
+
+    fcmTokens.forEach(token => {
+        sendNotification(token, payload.action, payload);
+    });
+
+    return res.status(200).json(
+        new ApiResponse(200, complaint, "Resolution approved successfully.")
+    );
+});
+
 const reopenComplaint = catchAsync(async (req, res) => {
     const { complaintId } = req.params;
     const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
@@ -578,6 +609,7 @@ export {
     createSectorAdmin,
     getAllSectorAdmin,
     removeSectorAdmin,
+    deactivateSectorAdmin,
     getActiveSectorsGrouped,
     getDashboardOverview,
     getComplaintDetails,
