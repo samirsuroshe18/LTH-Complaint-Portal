@@ -5,7 +5,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 export default function SubmitComplaint() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { selectedCategory, locationId } = location.state || {};
+  let { selectedCategory, locationId } = location.state || {};
+  // Fallback to sessionStorage if locationId is missing
+  if (!locationId) {
+    locationId = sessionStorage.getItem("locationId") || "";
+  }
 
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
@@ -324,7 +328,6 @@ export default function SubmitComplaint() {
                     aria-label="Upload photo"
                   />
                 </label>
-
                 {selectedFile && (
                   <div
                     className={`mt-4 p-3 ${themeClasses.successBackground} border ${themeClasses.successBorder} rounded-lg`}
@@ -340,7 +343,6 @@ export default function SubmitComplaint() {
                           File selected: {selectedFile.name}
                         </span>
                       </div>
-
                       {/* Remove Button */}
                       <button
                         onClick={removeFile}
@@ -353,7 +355,6 @@ export default function SubmitComplaint() {
                   </div>
                 )}
               </div>
-
               {/* Submit Button */}
               <div className="pt-4">
                 <button
@@ -377,14 +378,10 @@ export default function SubmitComplaint() {
               </div>
             </div>
           </div>
-
           {/* Footer */}
-          <div
-            className={`${themeClasses.footerBackground} px-8 py-4 border-t ${themeClasses.borderLight}`}
-          >
+          <div className={`${themeClasses.footerBackground} px-8 py-4 border-t ${themeClasses.borderLight}`}>
             <p className={`text-xs ${themeClasses.textTertiary} text-center`}>
-              Your complaint will be reviewed within 24 hours. For urgent
-              matters, please contact the front desk directly.
+              Your complaint will be reviewed within 24 hours. For urgent matters, please contact the front desk directly.
             </p>
           </div>
         </div>
