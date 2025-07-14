@@ -19,7 +19,12 @@ const HomePage = () => {
   // Memoize location ID extraction
   const locationId = useMemo(() => {
     const queryParams = new URLSearchParams(location.search);
-    return queryParams.get("locationId");
+    const id = queryParams.get("locationId");
+    // Store in sessionStorage if present
+    if (id) {
+      sessionStorage.setItem("locationId", id);
+    }
+    return id;
   }, [location.search]);
 
   // Memoize categories array
