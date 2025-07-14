@@ -11,6 +11,7 @@ import { locationIdToName } from '../utils/locationIdToName.js';
 const submitComplaint = catchAsync(async (req, res) => {
     const { category, description, locationId } = req.body;
     const location = locationIdToName(locationId);
+
     const complaintId = `QRY-${Date.now()}`;
     let imageUrl = null;
     const imagePath = req.file?.path || null;
@@ -47,32 +48,40 @@ const submitComplaint = catchAsync(async (req, res) => {
 
     const fcmTokens = await User.find({
         $or: [
-            { role: 'sectoradmin', sector: complaint.sector },
+            { role: 'sectoradmin', sectorType: complaint.sector },
             { role: 'superadmin' }
         ]
-    }).select('FCMToken')
+    }).select('FCMToken role')
         .lean();
 
+    const usersWithTokens = fcmTokens?.filter(user => user.FCMToken);
 
-    const tokens = fcmTokens?.map(user => user.FCMToken).filter(token => token);
-
-    if (tokens.length > 0) {
+    if (usersWithTokens.length > 0) {
         const title = `New Complaint: ${complaint.category}`;
         const message = `A new complaint has been registered in ${complaint.location}. Please review and take action.`;
 
-        const payload = {
+        const basePayload = {
             title,
             message,
             complaintId: String(complaint._id),
             category: complaint.category,
-            action: "NOTIFY_NEW_COMPLAINT",
         };
+
         if (complaint?.image) {
-            payload.imageUrl = complaint.image;
+            basePayload.imageUrl = complaint.image;
         }
 
-        tokens.forEach(token => {
-            sendNotification(token, payload.action, payload);
+        usersWithTokens.forEach(user => {
+            const action = user.role === 'superadmin'
+                ? 'NOTIFY_NEW_COMPLAINT_ADMIN'
+                : 'NOTIFY_NEW_COMPLAINT';
+
+            const payload = {
+                ...basePayload,
+                action: action
+            };
+
+            sendNotification(user.FCMToken, action, payload);
         });
     }
 
@@ -103,6 +112,23 @@ const getComplaints = catchAsync(async (req, res) => {
 
         filters.createdAt = {
             $gte: startDate,
+            $lte: endDate
+        };
+    }
+
+    if (req.query.startDate) {
+        const startDate = new Date(req.query.startDate);
+
+        filters.createdAt = {
+            $gte: startDate
+        };
+    }
+
+    if (req.query.endDate) {
+        const endDate = new Date(req.query.endDate);
+        endDate.setHours(23, 59, 59, 999);
+
+        filters.createdAt = {
             $lte: endDate
         };
     }

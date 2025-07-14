@@ -428,19 +428,16 @@ const approveResolution = catchAsync(async (req, res) => {
         throw new ApiError(404, "Complaint not found or could not be updated.");
     }
 
-    const adminFcmToken = await User.findOne({ role: 'superadmin' });
-    const fcmTokens = [resolution?.resolvedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
-
     let payload = {
         complaintId: String(resolution.complaintId),
         title: 'Resolution Approved',
-        message: 'Your submitted resolution for the complaint has been approved by the society manager.',
+        message: 'Your submitted resolution for the complaint has been approved.',
         action: 'RESOLUTION_APPROVED',
     };
 
-    fcmTokens.forEach(token => {
-        sendNotification(token, payload.action, payload);
-    });
+    if (resolution?.resolvedBy?.FCMToken) {
+        sendNotification(resolution?.resolvedBy?.FCMToken, payload.action, payload);
+    }
 
     return res.status(200).json(
         new ApiResponse(200, complaint, "Resolution approved successfully.")
@@ -475,7 +472,7 @@ const reopenComplaint = catchAsync(async (req, res) => {
         .populate({
             path: 'resolution',
             populate: [
-                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
+                { path: 'resolvedBy', select: 'userName email profile role phoneNo FCMToken' },
                 { path: 'approvedBy', select: 'userName email profile role phoneNo' },
                 { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
             ]
@@ -486,9 +483,6 @@ const reopenComplaint = catchAsync(async (req, res) => {
         throw new ApiError(404, "Complaint not found or could not be updated.");
     }
 
-    const adminFcmToken = await User.findOne({ role: 'superadmin' });
-    const fcmTokens = [updatedComplaint?.assignedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
-
     let payload = {
         complaintId: String(updatedComplaint._id),
         title: 'Complaint Reopened',
@@ -496,11 +490,9 @@ const reopenComplaint = catchAsync(async (req, res) => {
         action: 'REOPEN_COMPLAINT',
     };
 
-    fcmTokens.forEach(token => {
-        if (!token === req.user.FCMToken) {
-            sendNotification(token, payload.action, payload);
-        }
-    });
+    if (updatedComplaint?.resolution?.resolvedBy?.FCMToken) {
+        sendNotification(updatedComplaint?.resolution?.resolvedBy?.FCMToken, payload.action, payload);
+    }
 
     return res.status(200).json(
         new ApiResponse(200, updatedComplaint, "Complaint reopened successfully.")

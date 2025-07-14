@@ -167,19 +167,17 @@ const addComplaintResolution = catchAsync(async (req, res) => {
         throw new ApiError(404, "Complaint not found or could not be updated.");
     }
 
-    const adminFcmToken = await User.findOne({ role: 'superadmin' });
-    const fcmTokens = [updatedComplaint?.assignedBy?.FCMToken, adminFcmToken?.FCMToken].filter(Boolean);
-
     let payload = {
         complaintId: String(updatedComplaint._id),
         title: 'Resolution Submitted for Review',
         message: 'A technician has submitted a resolution for a complaint. Please review and approve or reject the resolution.',
-        action: 'REVIEW_RESOLUTION',
     };
 
-    fcmTokens.forEach(token => {
-        sendNotification(token, payload.action, payload);
-    });
+    if (updatedComplaint?.assignedBy?.FCMToken) {
+        const isSuperAdmin = updatedComplaint.assignedBy.role === 'superadmin';
+        payload.action = isSuperAdmin ? 'REVIEW_RESOLUTION_ADMIN' : 'REVIEW_RESOLUTION';
+        sendNotification(updatedComplaint.assignedBy.FCMToken, payload.action, payload);
+    }
 
     return res.status(200).json(
         new ApiResponse(200, updatedComplaint, "Complaint resolution added successfully.")

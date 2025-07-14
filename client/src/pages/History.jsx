@@ -112,7 +112,6 @@ const History = () => {
         setPagination({});
       }
     } catch (error) {
-      // Don't log abort errors as they're expected when cancelling requests
       if (error.name !== 'AbortError') {
         console.error("Fetch error:", error);
         setComplaints([]);

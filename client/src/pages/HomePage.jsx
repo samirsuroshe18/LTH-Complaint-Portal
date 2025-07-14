@@ -50,7 +50,7 @@ const HomePage = () => {
     },
     {
       icon: Monitor,
-      title: "IT Support",
+      title: "Technical",
       color: "bg-purple-500",
       hoverColor: "hover:bg-purple-600",
     },
