@@ -6,37 +6,33 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { Resolution } from "../models/resolution.model.js";
 import mongoose from "mongoose";
 import { sendNotification } from "../utils/sendNotification.js";
-import { User } from "../models/user.model.js";
 
 const getAssignedComplaints = catchAsync(async (req, res) => {
     // Pagination parameters
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-
+    
     // Filter parameters
-    const filters = {};
-
-    // Status filter
-    if (req.query.status) {
-        filters.status = req.query.status;
-    }
-
+    const matchStage = {
+        assignedWorker: req.user._id,
+        assignStatus: "assigned"
+    };
+    
     // Date range filter
     if (req.query.startDate && req.query.endDate) {
         const startDate = new Date(req.query.startDate);
         const endDate = new Date(req.query.endDate);
         endDate.setHours(23, 59, 59, 999); // Set to end of day
-
-        filters.createdAt = {
+        matchStage.createdAt = {
             $gte: startDate,
             $lte: endDate
         };
     }
-
+    
     // Name/keyword search
     if (req.query.search) {
-        filters.$or = [
+        matchStage.$or = [
             { complaintId: { $regex: req.query.search, $options: 'i' } },
             { category: { $regex: req.query.search, $options: 'i' } },
             { sector: { $regex: req.query.search, $options: 'i' } },
@@ -44,41 +40,149 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
         ];
     }
 
-    // Base match conditions for DeliveryEntry
-    const complaintMatch = {
-        assignedWorker: req.user._id,
-        assignStatus: "assigned",
-        ...filters
-    };
+    // Build aggregation pipeline
+    const pipeline = [
+        // Match complaints assigned to current user
+        { $match: matchStage },
+        
+        // Lookup resolution data
+        {
+            $lookup: {
+                from: "resolutions",
+                localField: "resolution",
+                foreignField: "_id",
+                as: "resolution"
+            }
+        },
+        
+        // Unwind resolution (convert array to object)
+        {
+            $unwind: {
+                path: "$resolution",
+                preserveNullAndEmptyArrays: true // Keep complaints without resolutions
+            }
+        },
+        
+        // Filter by resolution status if provided
+        ...(req.query.status ? [{
+            $match: {
+                "resolution.status": req.query.status
+            }
+        }] : []),
+        
+        // Populate assignedWorker
+        {
+            $lookup: {
+                from: "users",
+                localField: "assignedWorker",
+                foreignField: "_id",
+                as: "assignedWorker",
+                pipeline: [
+                    { $project: { userName: 1, email: 1, profile: 1, role: 1, phoneNo: 1 } }
+                ]
+            }
+        },
+        
+        // Populate assignedBy
+        {
+            $lookup: {
+                from: "users",
+                localField: "assignedBy",
+                foreignField: "_id",
+                as: "assignedBy",
+                pipeline: [
+                    { $project: { userName: 1, email: 1, profile: 1, role: 1, phoneNo: 1 } }
+                ]
+            }
+        },
+        
+        // Populate resolution.resolvedBy
+        {
+            $lookup: {
+                from: "users",
+                localField: "resolution.resolvedBy",
+                foreignField: "_id",
+                as: "resolution.resolvedBy",
+                pipeline: [
+                    { $project: { userName: 1, email: 1, profile: 1, role: 1, phoneNo: 1 } }
+                ]
+            }
+        },
+        
+        // Populate resolution.approvedBy
+        {
+            $lookup: {
+                from: "users",
+                localField: "resolution.approvedBy",
+                foreignField: "_id",
+                as: "resolution.approvedBy",
+                pipeline: [
+                    { $project: { userName: 1, email: 1, profile: 1, role: 1, phoneNo: 1 } }
+                ]
+            }
+        },
+        
+        // Populate resolution.rejectedBy
+        {
+            $lookup: {
+                from: "users",
+                localField: "resolution.rejectedBy",
+                foreignField: "_id",
+                as: "resolution.rejectedBy",
+                pipeline: [
+                    { $project: { userName: 1, email: 1, profile: 1, role: 1, phoneNo: 1 } }
+                ]
+            }
+        },
+        
+        // Convert populated arrays to objects (since they're single documents)
+        {
+            $addFields: {
+                assignedWorker: { $arrayElemAt: ["$assignedWorker", 0] },
+                assignedBy: { $arrayElemAt: ["$assignedBy", 0] },
+                "resolution.resolvedBy": { $arrayElemAt: ["$resolution.resolvedBy", 0] },
+                "resolution.approvedBy": { $arrayElemAt: ["$resolution.approvedBy", 0] },
+                "resolution.rejectedBy": { $arrayElemAt: ["$resolution.rejectedBy", 0] }
+            }
+        },
+        
+        // Remove __v field
+        {
+            $project: {
+                __v: 0
+            }
+        },
+        
+        // Sort by creation date (newest first)
+        { $sort: { createdAt: -1 } }
+    ];
 
     // Count total documents for pagination
-    const totalCount = await Complaint.countDocuments(complaintMatch);
+    const countPipeline = [
+        ...pipeline.slice(0, -1), // Remove sort stage for counting
+        { $count: "totalCount" }
+    ];
+    
+    const countResult = await Complaint.aggregate(countPipeline);
+    const totalCount = countResult.length > 0 ? countResult[0].totalCount : 0;
     const totalPages = Math.ceil(totalCount / limit);
 
-    const assignedComplaints = await Complaint.find(complaintMatch)
-        .sort({ createdAt: -1 })
-        .populate("assignedWorker", "userName email profile role phoneNo")
-        .populate("assignedBy", "userName email profile role phoneNo")
-        .populate({
-            path: 'resolution',
-            populate: [
-                { path: 'resolvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'approvedBy', select: 'userName email profile role phoneNo' },
-                { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
-            ]
-        })
-        .select("-__v");
+    // Add pagination to the main pipeline
+    const paginatedPipeline = [
+        ...pipeline,
+        { $skip: skip },
+        { $limit: limit }
+    ];
 
-    // Apply pagination on combined results
-    const response = assignedComplaints.slice(skip, skip + limit);
+    const assignedComplaints = await Complaint.aggregate(paginatedPipeline);
 
-    if (response.length <= 0) {
+    if (assignedComplaints.length <= 0) {
         throw new ApiError(404, "No entries found matching your criteria");
     }
 
     return res.status(200).json(
         new ApiResponse(200, {
-            assignComplaints: response,
+            assignComplaints: assignedComplaints,
             pagination: {
                 totalEntries: totalCount,
                 entriesPerPage: limit,
