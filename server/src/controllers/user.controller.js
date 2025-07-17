@@ -85,19 +85,9 @@ const loginUser = catchAsync(async (req, res) => {
         secure: true
     }
 
-    const loggedInUser = {
-        _id: user._id,
-        userName: user.userName,
-        email: user.email,
-        profileImage: user?.profileImage,
-        role: user.role,
-        isActive: user.isActive,
-        lastLogin: user.lastLogin
-    }
-
     return res.status(200).cookie('accessToken', accessToken, option).cookie('refreshToken', refreshToken, option).json(
         new ApiResponse(200, {
-            loggedInUser,
+            loggedInUser : user,
             accessToken,
             refreshToken
         }, "User logged in successfully")
