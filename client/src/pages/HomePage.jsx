@@ -155,7 +155,7 @@ const HomePage = () => {
         </header>
 
         {/* Categories Grid */}
-        <main className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <main className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-12">
           {categories.map((category, index) => {
             const IconComponent = category.icon;
             return (
