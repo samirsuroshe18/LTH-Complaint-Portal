@@ -25,6 +25,7 @@ const submitComplaint = catchAsync(async (req, res) => {
 
     const recentComplaint = await Complaint.findOne({
         location,
+        category,
         createdAt: { $gte: fortyEightHoursAgo }
     });
 
