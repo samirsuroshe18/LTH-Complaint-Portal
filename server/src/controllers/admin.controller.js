@@ -104,7 +104,7 @@ const getActiveSectorsGrouped = catchAsync(async (req, res) => {
 
 const getDashboardOverview = catchAsync(async (req, res) => {
     // 1. Total active sector admins
-    const sectorAdmins = await User.find({ role: 'sectoradmin', isActive: true });
+    const sectorAdmins = await User.find({ role: 'sectoradmin' });
     const totalSectorAdmins = sectorAdmins.length;
 
     // 2. Total complaints by status

@@ -6,9 +6,9 @@ const router = Router();
 
 router.route('/login').post(loginUser);
 router.route('/forgot-password').post(forgotPassword);
+router.route('/create-admin').post(createSuperAdmin);
 
 //Secure routes
-router.route('/create-admin').post(createSuperAdmin);
 router.route('/logout').get(verifyJwt, logoutUser);
 router.route('/refresh-token').post(refreshAccessToken);
 router.route('/update-fcm').post(verifyJwt, updateFCMToken);

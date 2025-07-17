@@ -27,22 +27,22 @@ const createSuperAdmin = catchAsync(async (req, res, next) => {
     const { userName, email, password } = req.body;
 
     if (!userName || !email || !password) {
-      return res.status(400).json({ message: "All fields are required." });
+        return res.status(400).json({ message: "All fields are required." });
     }
 
     // Check if superadmin already exists
     const existingUser = await User.findOne({ email, role: 'superadmin' });
 
     if (existingUser) {
-      return res.status(409).json({ message: "Superadmin with this email already exists." });
+        return res.status(409).json({ message: "Superadmin with this email already exists." });
     }
 
     // Create user
     const superadmin = await User.create({
-      userName,
-      email,
-      password,
-      role: 'superadmin'
+        userName,
+        email,
+        password,
+        role: 'superadmin'
     });
 
     if (!superadmin) {
@@ -140,38 +140,34 @@ const getCurrentUser = catchAsync(async (req, res) => {
 });
 
 const refreshAccessToken = catchAsync(async (req, res) => {
-    try {
-        const incomingRefreshToken = req.cookie?.refreshToken || req.header("Authorization")?.replace("Bearer ", "");
+    const incomingRefreshToken = req.cookie?.refreshToken || req.header("Authorization")?.replace("Bearer ", "");
 
-        if (!incomingRefreshToken) {
-            throw new ApiError(401, "Unauthorized request");
-        }
-
-        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
-
-        const user = await User.findById(decodedToken?._id);
-
-        if (!user) {
-            throw new ApiError(401, "Invalid refresh token");
-        }
-
-        if (incomingRefreshToken != user?.refreshToken) {
-            throw new ApiError(401, "Refresh token is expired or used");
-        }
-
-        const option = {
-            httpOnly: true,
-            secure: true
-        }
-
-        const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
-
-        return res.status(200).clearCookie("accessToken", accessToken, option).clearCookie("refreshToken", refreshToken, option).json(
-            new ApiResponse(200, { accessToken, refreshToken }, "Access token refreshed")
-        );
-    } catch (error) {
-        throw new ApiError(401, "Something went wrong : Invalid refresh token");
+    if (!incomingRefreshToken || incomingRefreshToken === "null" || incomingRefreshToken === "undefined") {
+        throw new ApiError(401, "Unauthorized request");
     }
+
+    const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
+
+    const user = await User.findById(decodedToken?._id);
+
+    if (!user) {
+        throw new ApiError(401, "Invalid refresh token");
+    }
+
+    if (incomingRefreshToken != user?.refreshToken) {
+        throw new ApiError(401, "Refresh token is expired or used");
+    }
+
+    const option = {
+        httpOnly: true,
+        secure: true
+    }
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
+
+    return res.status(200).clearCookie("accessToken", accessToken, option).clearCookie("refreshToken", refreshToken, option).json(
+        new ApiResponse(200, { accessToken, refreshToken }, "Access token refreshed")
+    );
 });
 
 const updateFCMToken = catchAsync(async (req, res) => {
