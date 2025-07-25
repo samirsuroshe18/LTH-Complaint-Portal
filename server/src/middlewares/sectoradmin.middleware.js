@@ -2,7 +2,7 @@ import catchAsync from "../utils/catchAsync.js";
 import ApiError from "../utils/ApiError.js";
 
 const verifySectorAdmin = catchAsync(async (req, _, next) => {
-    if (req.user.role !== 'sectoradmin') {
+    if (!['sectoradmin', 'superadmin'].includes(req.user.role)) {
         throw new ApiError(403, "You are not sector admin.");
     }
 

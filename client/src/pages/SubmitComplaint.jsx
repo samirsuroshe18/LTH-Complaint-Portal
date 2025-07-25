@@ -124,7 +124,7 @@ export default function SubmitComplaint() {
         formData.append("file", selectedFile);
       }
 
-      const response = await fetch("/api/v1/complaint/submit", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/complaint/submit`, {
         method: "POST",
         body: formData,
       });

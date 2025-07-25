@@ -12,7 +12,7 @@ const submitComplaint = catchAsync(async (req, res) => {
     const { category, description, locationId } = req.body;
     const location = locationIdToName(locationId);
 
-    const complaintId = `QRY-${Date.now()}`;
+    const complaintId = `QRY-${Math.floor(10000 + Math.random() * 90000)}`;
     let imageUrl = null;
     const imagePath = req.file?.path || null;
 
@@ -155,7 +155,8 @@ const getComplaints = catchAsync(async (req, res) => {
     const totalPages = Math.ceil(totalCount / limit);
 
     const updatedComplaint = await Complaint.find(complaintMatch)
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .populate("assignedWorker", "userName email");
 
     // Apply pagination on combined results
     const response = updatedComplaint.slice(skip, skip + limit);

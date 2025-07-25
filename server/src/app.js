@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config()
 import express from "express";
 import cors from 'cors';
 import cookieParser from "cookie-parser";
@@ -42,6 +44,7 @@ import complaintRouter from './routes/complaint.routes.js';
 import adminRouter from './routes/admin.routes.js';
 import sectorAdminRouter from './routes/sectoradmin.routes.js';
 import technicianRouter from './routes/technician.routes.js';
+import noticeBoardRouter from './routes/noticeBoard.routes.js';
 
 //Routes declaration
 app.use("/api/v1/user", userRouter);
@@ -50,6 +53,7 @@ app.use("/api/v1/complaint", complaintRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/sectoradmin", sectorAdminRouter);
 app.use("/api/v1/technician", technicianRouter);
+app.use("/api/v1/notice", noticeBoardRouter);
 
 // Custom error handeling
 app.use(errorHandler)

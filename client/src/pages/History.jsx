@@ -1,24 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Search,
-  Filter,
-  MapPin,
-  Clock,
-  User,
-  X,
-  CheckCircle,
-  AlertCircle,
-  Pause,
-} from "lucide-react";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+import { Search, Filter, MapPin, Clock, User, X, CheckCircle, AlertCircle, Pause } from "lucide-react";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 // Custom debounce hook
 const useDebounce = (value, delay) => {
@@ -83,7 +65,7 @@ const History = () => {
 
       // Make API call with abort signal
       const response = await fetch(
-        `/api/v1/complaint/get-complaints?${queryParams}`,
+        `${import.meta.env.VITE_API_URL}/api/v1/complaint/get-complaints?${queryParams}`,
         {
           signal: abortControllerRef.current.signal,
         }
@@ -554,7 +536,7 @@ const History = () => {
             complaints.map((complaint) => (
               <div
                 key={complaint._id}
-                className={`${getThemeClasses().cardBackground} rounded-lg shadow-sm border ${getThemeClasses().borderLight} hover:shadow-md transition-shadow`}
+                className={`${getThemeClasses().cardBackground} rounded-lg border ${getThemeClasses().borderLight} ${getThemeClasses().hoverBackground} ${getThemeClasses().hoverBorder} cursor-pointer transition-all duration-200 transform hover:scale-[1.02] hover:shadow-lg ${getThemeClasses().focusRing}`}
               >
                 <div className="p-4 sm:p-6">
                   <div className="flex flex-col space-y-4">
@@ -604,7 +586,7 @@ const History = () => {
                       <div className="flex items-center space-x-1">
                         <User className="w-4 h-4 flex-shrink-0" />
                         <span className="capitalize truncate">
-                          {complaint.assignStatus}
+                          {`Assigned To : ${complaint.assignStatus == 'assigned' ? complaint.assignedWorker?.userName : complaint.assignStatus} `}
                         </span>
                       </div>
                     </div>

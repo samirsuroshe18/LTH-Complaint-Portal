@@ -153,7 +153,16 @@ const getComplaints = catchAsync(async (req, res) => {
 
     // Entry type filter
     if (req.query.status) {
-        filters.status = req.query.status;
+        // Split by comma, then trim each status
+        const statuses = req.query.status.split(',').map(s => s.trim());
+
+        if (statuses.length === 2) {
+            // OR condition for exactly two statuses
+            filters.status = { $in: statuses };
+        } else {
+            // Single status filter
+            filters.status = statuses[0];
+        }
     }
 
     // Name/keyword search
@@ -535,7 +544,7 @@ const approveResolution = catchAsync(async (req, res) => {
     if (resolution?.resolvedBy?.FCMToken) {
         sendNotification(resolution?.resolvedBy?.FCMToken, payload.action, payload);
     }
-    
+
     return res.status(200).json(
         new ApiResponse(200, complaint, "Resolution approved successfully.")
     );

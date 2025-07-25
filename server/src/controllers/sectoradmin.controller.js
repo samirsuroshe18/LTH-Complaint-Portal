@@ -54,7 +54,16 @@ const getComplaints = catchAsync(async (req, res) => {
 
     // Entry type filter
     if (req.query.status) {
-        filters.status = req.query.status;
+        // Split by comma, then trim each status
+        const statuses = req.query.status.split(',').map(s => s.trim());
+
+        if (statuses.length === 2) {
+            // OR condition for exactly two statuses
+            filters.status = { $in: statuses };
+        } else {
+            // Single status filter
+            filters.status = statuses[0];
+        }
     }
 
     // Name/keyword search

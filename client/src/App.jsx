@@ -3,6 +3,7 @@ import { ReactRouterAppProvider } from "@toolpad/core/react-router";
 import { Outlet } from "react-router";
 import HomeIcon from "@mui/icons-material/Home";
 import HistoryIcon from "@mui/icons-material/History";
+import { BellIcon } from "lucide-react";
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -52,6 +53,11 @@ function App() {
       title: "History",
       segment: "history",
       icon: <HistoryIcon />,
+    },
+    {
+      title: "Notice",
+      segment: "notice-board",
+      icon: <BellIcon />,
     },
   ];
 
