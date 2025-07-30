@@ -4,7 +4,6 @@ import ApiError from "../utils/ApiError.js";
 import { Complaint } from "../models/complaint.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { Resolution } from "../models/resolution.model.js";
-import mongoose from "mongoose";
 import { sendNotification } from "../utils/sendNotification.js";
 
 const getAssignedComplaints = catchAsync(async (req, res) => {
@@ -12,13 +11,13 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    
+
     // Filter parameters
     const matchStage = {
         assignedWorker: req.user._id,
         assignStatus: "assigned"
     };
-    
+
     // Date range filter
     if (req.query.startDate && req.query.endDate) {
         const startDate = new Date(req.query.startDate);
@@ -29,12 +28,11 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
             $lte: endDate
         };
     }
-    
+
     // Name/keyword search
     if (req.query.search) {
         matchStage.$or = [
             { complaintId: { $regex: req.query.search, $options: 'i' } },
-            { category: { $regex: req.query.search, $options: 'i' } },
             { sector: { $regex: req.query.search, $options: 'i' } },
             { location: { $regex: req.query.search, $options: 'i' } },
         ];
@@ -44,7 +42,22 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
     const pipeline = [
         // Match complaints assigned to current user
         { $match: matchStage },
-        
+
+        // Lookup location data
+        {
+            $lookup: {
+                from: "locations",
+                localField: "location",
+                foreignField: "_id",
+                as: "location"
+            }
+        },
+        {
+            $addFields: {
+                location: { $arrayElemAt: ["$location", 0] }
+            }
+        },
+
         // Lookup resolution data
         {
             $lookup: {
@@ -54,7 +67,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 as: "resolution"
             }
         },
-        
+
         // Unwind resolution (convert array to object)
         {
             $unwind: {
@@ -62,14 +75,14 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 preserveNullAndEmptyArrays: true // Keep complaints without resolutions
             }
         },
-        
+
         // Filter by resolution status if provided
         ...(req.query.status ? [{
             $match: {
                 "resolution.status": req.query.status
             }
         }] : []),
-        
+
         // Populate assignedWorker
         {
             $lookup: {
@@ -82,7 +95,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 ]
             }
         },
-        
+
         // Populate assignedBy
         {
             $lookup: {
@@ -95,7 +108,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 ]
             }
         },
-        
+
         // Populate resolution.resolvedBy
         {
             $lookup: {
@@ -108,7 +121,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 ]
             }
         },
-        
+
         // Populate resolution.approvedBy
         {
             $lookup: {
@@ -121,7 +134,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 ]
             }
         },
-        
+
         // Populate resolution.rejectedBy
         {
             $lookup: {
@@ -134,7 +147,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 ]
             }
         },
-        
+
         // Convert populated arrays to objects (since they're single documents)
         {
             $addFields: {
@@ -145,14 +158,14 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
                 "resolution.rejectedBy": { $arrayElemAt: ["$resolution.rejectedBy", 0] }
             }
         },
-        
+
         // Remove __v field
         {
             $project: {
                 __v: 0
             }
         },
-        
+
         // Sort by creation date (newest first)
         { $sort: { createdAt: -1 } }
     ];
@@ -162,7 +175,7 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
         ...pipeline.slice(0, -1), // Remove sort stage for counting
         { $count: "totalCount" }
     ];
-    
+
     const countResult = await Complaint.aggregate(countPipeline);
     const totalCount = countResult.length > 0 ? countResult[0].totalCount : 0;
     const totalPages = Math.ceil(totalCount / limit);
@@ -196,11 +209,11 @@ const getAssignedComplaints = catchAsync(async (req, res) => {
 
 const getTechnicianDetails = catchAsync(async (req, res) => {
     const { complaintId } = req.body;
-    const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
 
-    const complaintDetails = await Complaint.findById(complaintObjectId)
+    const complaintDetails = await Complaint.findById(complaintId)
         .sort({ createdAt: -1 })
         .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -223,7 +236,6 @@ const getTechnicianDetails = catchAsync(async (req, res) => {
 
 const addComplaintResolution = catchAsync(async (req, res) => {
     const { complaintId, resolutionNote } = req.body;
-    const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
     let imageUrl = null;
     const imagePath = req.file?.path || null;
 
@@ -233,7 +245,7 @@ const addComplaintResolution = catchAsync(async (req, res) => {
     }
 
     const updateResolution = await Resolution.findOneAndUpdate(
-        { complaintId: complaintObjectId },
+        { complaintId },
         {
             status: "under_review",
             resolutionAttachment: imageUrl || '',
@@ -249,7 +261,7 @@ const addComplaintResolution = catchAsync(async (req, res) => {
     }
 
     const updatedComplaint = await Complaint.findByIdAndUpdate(
-        complaintObjectId,
+        complaintId,
         {
             status: "In Progress",
         },
@@ -257,6 +269,7 @@ const addComplaintResolution = catchAsync(async (req, res) => {
     )
         .populate("assignedWorker", "userName email profile role phoneNo")
         .populate("assignedBy", "userName email profile role phoneNo FCMToken")
+        .populate("location", "name")
         .populate({
             path: 'resolution',
             populate: [
@@ -290,12 +303,10 @@ const addComplaintResolution = catchAsync(async (req, res) => {
 
 const startWorkingOnComplaint = catchAsync(async (req, res) => {
     const { id } = req.params;
-    const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(id);
 
     const createResolution = await Resolution.create({
-        complaintId: complaintObjectId,
+        complaintId: id,
         status: "in_progress",
-        complaintId: complaintObjectId,
     });
 
     if (!createResolution) {
@@ -303,13 +314,14 @@ const startWorkingOnComplaint = catchAsync(async (req, res) => {
     }
 
     const updatedComplaint = await Complaint.findByIdAndUpdate(
-        complaintObjectId,
+        id,
         {
             status: "In Progress",
             resolution: createResolution._id,
         },
         { new: true }
     ).populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',

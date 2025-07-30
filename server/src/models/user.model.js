@@ -41,7 +41,7 @@ const userSchema = new Schema({
 
     sectorType: {
         type: String,
-        enum: ['Security', 'Housekeeping', 'Maintenance', 'IT', 'General Services'],
+        enum: ['Housekeeping', 'Carpentry', 'Telephone', 'Electrical', 'Technical', 'Unsafe Condition', 'Air Conditioning', 'Others'],
         required: function () {
             return this.role === 'sectoradmin';
         },
@@ -49,7 +49,7 @@ const userSchema = new Schema({
 
     technicianType: {
         type: String,
-        enum: ['Light', 'AC', 'Telephone', 'Technical', 'HouseKeeping', 'Carpentry', 'Danger', 'Other'],
+        enum: ['Housekeeping', 'Carpentry', 'Telephone', 'Electrical', 'Technical', 'Unsafe Condition', 'Air Conditioning', 'Others'],
         required: function () {
             return this.role === 'technician';
         },

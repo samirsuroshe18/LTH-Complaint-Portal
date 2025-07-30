@@ -22,7 +22,7 @@ app.set('views', path.join(__dirname, './views'));
 // this use for cross origin sharing 
 app.use(
   cors({
-      origin: process.env.CORS_ORIGIN, // Allow frontend origin
+      origin: [process.env.CORS_ORIGIN, 'http://localhost:5173'], // Allow frontend origin
       methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
       allowedHeaders: ['Content-Type', 'Authorization'], // Allowed headers
       credentials: true, // Allow cookies/auth headers if needed
@@ -45,6 +45,7 @@ import adminRouter from './routes/admin.routes.js';
 import sectorAdminRouter from './routes/sectoradmin.routes.js';
 import technicianRouter from './routes/technician.routes.js';
 import noticeBoardRouter from './routes/noticeBoard.routes.js';
+import locationRouter from './routes/location.routes.js';
 
 //Routes declaration
 app.use("/api/v1/user", userRouter);
@@ -54,6 +55,7 @@ app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/sectoradmin", sectorAdminRouter);
 app.use("/api/v1/technician", technicianRouter);
 app.use("/api/v1/notice", noticeBoardRouter);
+app.use("/api/v1/location", locationRouter);
 
 // Custom error handeling
 app.use(errorHandler)

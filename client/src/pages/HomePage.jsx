@@ -1,31 +1,22 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import {
-  Hammer,
-  Phone,
-  Zap,
-  AlertTriangle,
-  Wind,
-  MoreHorizontal,
-} from "lucide-react";
+import { AlertTriangle, MoreHorizontal } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import housekeepingImage from "../assets/household.png";
-import EngineeringIcon from '@mui/icons-material/Engineering';
+import housekeepingImage from "../assets/housekeeper.png";
+import airConditioner from "../assets/air-contioner.png";
+import telephone from "../assets/telephone.png";
+import lightBulb from "../assets/light-bulb.png";
+import technicalSupport from "../assets/technical-support.png";
+import carpenter from "../assets/carpenter.png";
+import danger from "../assets/danger.png";
+import LinearProgress from "@mui/material/LinearProgress";
 
 const HomePage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(false);
-
-  // Memoize location ID extraction
-  const locationId = useMemo(() => {
-    const queryParams = new URLSearchParams(location.search);
-    const id = queryParams.get("locationId");
-    // Store in sessionStorage if present
-    if (id) {
-      sessionStorage.setItem("locationId", id);
-    }
-    return id;
-  }, [location.search]);
+  const [isLoading, setLoading] = useState(false);
+  const [sectors, setSectors] = useState([]);
+  const [locationId, setLocationId] = useState(null);
 
   // Memoize categories array
   const categories = useMemo(
@@ -41,52 +32,139 @@ const HomePage = () => {
         title: "Housekeeping",
         color: "bg-blue-500",
         hoverColor: "hover:bg-blue-600",
+        value: "Housekeeping",
       },
       {
-        icon: Hammer,
+        icon: () => (
+          <img src={carpenter} alt="carpenter Icon" className="w-9 h-9" />
+        ),
         title: "Carpentry",
         color: "bg-orange-500",
         hoverColor: "hover:bg-orange-600",
+        value: "Carpentry",
       },
       {
-        icon: Phone,
+        icon: () => (
+          <img src={telephone} alt="telephone Icon" className="w-9 h-9" />
+        ),
         title: "Telephone",
         color: "bg-cyan-500",
         hoverColor: "hover:bg-cyan-600",
+        value: "Telephone",
       },
       {
-        icon: Zap,
+        icon: () => (
+          <img src={lightBulb} alt="light bulb Icon" className="w-9 h-9" />
+        ),
         title: "Electrical",
         color: "bg-yellow-500",
         hoverColor: "hover:bg-yellow-600",
+        value: "Electrical",
       },
       {
-        icon: EngineeringIcon,
+        icon: () => (
+          <img
+            src={technicalSupport}
+            alt="Technical Support Icon"
+            className="w-9 h-9"
+          />
+        ),
         title: "Technical",
         color: "bg-purple-500",
         hoverColor: "hover:bg-purple-600",
+        value: "Technical",
       },
       {
-        icon: AlertTriangle,
+        icon: () => <img src={danger} alt="danger Icon" className="w-9 h-9" />,
         title: "Unsafe Condition",
         color: "bg-red-500",
         hoverColor: "hover:bg-red-600",
+        value: "Danger",
       },
       {
-        icon: Wind,
+        icon: () => (
+          <img
+            src={airConditioner}
+            alt="air conditioner Icon"
+            className="w-9 h-9"
+          />
+        ),
         title: "Air Conditioning",
         color: "bg-green-500",
         hoverColor: "hover:bg-green-600",
+        value: "AC",
       },
       {
         icon: MoreHorizontal,
         title: "Others",
         color: "bg-gray-500",
         hoverColor: "hover:bg-gray-600",
+        value: "Other",
       },
     ],
     []
   );
+
+  // Memoize filtered categories based on sectors
+  const filteredCategories = useMemo(() => {
+    if (!sectors || sectors.length === 0) {
+      return [];
+    }
+
+    return categories.filter((category) => sectors.includes(category.title));
+  }, [categories, sectors]);
+
+  const fetchLocationData = useCallback(async () => {
+    let id =
+      new URLSearchParams(location.search).get("locationId") ||
+      sessionStorage.getItem("locationId");
+    let cachedSectors = sessionStorage.getItem("sectors");
+
+    if (!id) {
+      return;
+    }
+
+    setLocationId(id);
+    sessionStorage.setItem("locationId", id);
+
+    if (cachedSectors) {
+      setSectors(JSON.parse(cachedSectors));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const apiUrl = `${import.meta.env.VITE_API_URL}/api/v1/location/get-location/${id}`;
+      const response = await fetch(apiUrl);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        const responseData = data.data;
+        sessionStorage.setItem(
+          "sectors",
+          JSON.stringify(responseData.sectors || [])
+        );
+        setSectors(responseData.sectors || []);
+      } else {
+        setSectors([]);
+      }
+    } catch (error) {
+      console.error("API call failed:", error);
+      setSectors([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [location.search]);
+
+  // FIXED: Effect to handle location ID and fetch data
+  useEffect(() => {
+    fetchLocationData();
+  }, [fetchLocationData]); 
 
   // Memoize theme classes
   const themeClasses = useMemo(
@@ -99,15 +177,22 @@ const HomePage = () => {
       textSecondary: isDarkMode ? "text-gray-300" : "text-gray-600",
       border: isDarkMode ? "border-gray-600" : "border-gray-300",
       borderLight: isDarkMode ? "border-gray-700" : "border-gray-200",
+      statusYellow: isDarkMode
+        ? "bg-yellow-900/30 text-yellow-300 border-yellow-700"
+        : "bg-yellow-100 text-yellow-800 border-yellow-200",
+      statusRed: isDarkMode
+        ? "bg-red-900/30 text-red-300 border-red-700"
+        : "bg-red-100 text-red-800 border-red-200",
+      cardBackground: isDarkMode ? "bg-gray-800" : "bg-white",
     }),
     [isDarkMode]
   );
 
   // Memoize category click handler
   const handleCategoryClick = useCallback(
-    (category) => {
+    (sector) => {
       navigate("/submit", {
-        state: { selectedCategory: category, locationId },
+        state: { selectedSector: sector, locationId },
       });
     },
     [navigate, locationId]
@@ -161,6 +246,50 @@ const HomePage = () => {
     []
   );
 
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100vh",
+          display: "flex",
+          alignItems: "top",
+        }}
+      >
+        <LinearProgress style={{ width: "100%" }} />
+      </div>
+    );
+  }
+
+  if (filteredCategories.length <= 0) {
+    // Array is empty
+    return (
+      <div
+        className={`min-h-screen ${themeClasses.background} flex flex-col items-center justify-center px-4`}
+      >
+        <div
+          className={`${themeClasses.cardBackground} shadow-md rounded-xl p-8 max-w-md w-full text-center`}
+        >
+          <div className="flex justify-center mb-4">
+            <div className={`${themeClasses.statusYellow} rounded-full p-4`}>
+              <AlertTriangle className={`w-8 h-8`} />
+            </div>
+          </div>
+          <h2 className={`text-xl font-bold ${themeClasses.textPrimary} mb-2`}>
+            Location ID Missing of Invalid
+          </h2>
+          <p className={`${themeClasses.textSecondary} mb-6`}>
+            We couldn't find the location ID in your URL or session. Please go
+            back and scan the QR code again.
+          </p>
+          <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition">
+            Go Back to Scan
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen ${themeClasses.background} py-8 px-4`}>
       <div className="max-w-6xl mx-auto">
@@ -183,7 +312,7 @@ const HomePage = () => {
 
         {/* Categories Grid */}
         <main className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-12">
-          {categories.map((category, index) => {
+          {filteredCategories.map((category, index) => {
             const IconComponent = category.icon;
             return (
               <button

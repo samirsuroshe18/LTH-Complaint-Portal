@@ -8,122 +8,18 @@ import mailSender from '../utils/mailSender.js';
 import { Resolution } from '../models/resolution.model.js';
 import { sendNotification } from '../utils/sendNotification.js';
 
-const getActiveSectorsGrouped = catchAsync(async (req, res) => {
-    // Pagination parameters
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    // Filter parameters
-    const filters = {};
-
-    // Name/keyword search
-    if (req.query.search) {
-        filters.$or = [
-            { complaintId: { $regex: req.query.search, $options: 'i' } },
-            { category: { $regex: req.query.search, $options: 'i' } },
-            { sector: { $regex: req.query.search, $options: 'i' } },
-            { location: { $regex: req.query.search, $options: 'i' } },
-        ];
-    }
-
-    const sectorAdmins = await User.find({ role: "sectoradmin", isActive: true });
-
-    // Group admins by sectorType
-    const sectorMap = {};
-
-    for (const admin of sectorAdmins) {
-        const sector = admin.sectorType;
-
-        if (!sectorMap[sector]) {
-            sectorMap[sector] = {
-                sectorName: sector,
-                admins: [],
-                totalCount: 0,
-                pendingCount: 0,
-                lastUpdated: null,
-            };
-        }
-
-        sectorMap[sector].admins.push({
-            id: admin._id,
-            name: admin.userName,
-            email: admin.email,
-        });
-
-        const complaints = await Complaint.find({ sector });
-
-        const pending = complaints.filter(c => c.status === "Pending").length;
-        const total = complaints.length;
-        const latest = complaints.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
-
-        sectorMap[sector].pendingCount = pending;
-        sectorMap[sector].totalCount = total;
-        if (latest?.updatedAt && (!sectorMap[sector].lastUpdated || latest.updatedAt > sectorMap[sector].lastUpdated)) {
-            sectorMap[sector].lastUpdated = latest.updatedAt;
-        }
-    }
-
-    const sectors = Object.values(sectorMap);
-
-    // Apply filters here
-    let filteredSectors = sectors;
-
-    if (req.query.search) {
-        const searchTerm = req.query.search.toLowerCase();
-        filteredSectors = filteredSectors.filter(sectorObj =>
-            sectorObj.sectorName.toLowerCase().includes(searchTerm)
-        );
-    }
-
-    // You can add more filters here similarly
-
-    const totalCount = filteredSectors.length; // Update total count after filtering
-    const totalPages = Math.ceil(totalCount / limit);
-
-    const response = filteredSectors.slice(skip, skip + limit);
-
-    if (response.length <= 0) {
-        throw new ApiError(404, "No entries found matching your criteria");
-    }
-
-    return res.status(200).json(
-        new ApiResponse(200, {
-            ActiveSectorModel: response,
-            pagination: {
-                totalEntries: totalCount,
-                entriesPerPage: limit,
-                currentPage: page,
-                totalPages: totalPages,
-                hasMore: page < totalPages
-            }
-        }, "Active sectors grouped by sector admins fetched successfully.")
-    );
-
-});
-
 const getDashboardOverview = catchAsync(async (req, res) => {
-    // 1. Total active sector admins
-    const sectorAdmins = await User.find({ role: 'sectoradmin' });
-    const totalSectorAdmins = sectorAdmins.length;
-
-    // 2. Total complaints by status
+    // Total complaints by status
     const pendingQueries = await Complaint.countDocuments({ status: 'Pending' });
     const resolvedQueries = await Complaint.countDocuments({ status: 'Resolved' });
     const inProgressQueries = await Complaint.countDocuments({ status: 'In Progress' });
     const rejectedQueries = await Complaint.countDocuments({ status: 'Rejected' });
 
-    // 3. Active sectors — based on unique sector types assigned to active sector admins
-    const activeSectorsSet = new Set(sectorAdmins.map(admin => admin.sectorType));
-    const totalActiveSectors = activeSectorsSet.size;
-
     // ✅ Return summary
     return res.status(200).json(
         new ApiResponse(200, {
-            totalSectorAdmins,
             pendingQueries,
             resolvedQueries,
-            totalActiveSectors,
             inProgressQueries,
             rejectedQueries
         }, "Dashboard overview fetched successfully.")
@@ -153,24 +49,13 @@ const getComplaints = catchAsync(async (req, res) => {
 
     // Entry type filter
     if (req.query.status) {
-        // Split by comma, then trim each status
-        const statuses = req.query.status.split(',').map(s => s.trim());
-
-        if (statuses.length === 2) {
-            // OR condition for exactly two statuses
-            filters.status = { $in: statuses };
-        } else {
-            // Single status filter
-            filters.status = statuses[0];
-        }
+        filters.status = req.query.status;
     }
 
     // Name/keyword search
     if (req.query.search) {
         filters.$or = [
             { complaintId: { $regex: req.query.search, $options: 'i' } },
-            { category: { $regex: req.query.search, $options: 'i' } },
-            { location: { $regex: req.query.search, $options: 'i' } },
             { sector: { $regex: req.query.search, $options: 'i' } }
         ];
     }
@@ -186,6 +71,7 @@ const getComplaints = catchAsync(async (req, res) => {
 
     const updatedComplaint = await Complaint.find(complaintMatch)
         .sort({ createdAt: -1 })
+        .populate("location", "name")
         .populate("assignedWorker", "userName email profile role phoneNo")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
@@ -220,10 +106,10 @@ const getComplaints = catchAsync(async (req, res) => {
 });
 
 const getComplaintDetails = catchAsync(async (req, res) => {
-    const id = mongoose.Types.ObjectId.createFromHexString(req.params.id);
 
-    const complaint = await Complaint.findById(id)
+    const complaint = await Complaint.findById(req.params.id)
         .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -327,9 +213,8 @@ const getAllSectorAdmin = catchAsync(async (req, res) => {
 
 const removeSectorAdmin = catchAsync(async (req, res) => {
     const { id } = req.body;
-    const userId = mongoose.Types.ObjectId.createFromHexString(id);
 
-    const isRemovedAdmin = await User.deleteOne({ _id: userId, role: "sectoradmin" });
+    const isRemovedAdmin = await User.deleteOne({ _id: id, role: "sectoradmin" });
 
     if (!isRemovedAdmin) {
         throw new ApiError(500, "something went wrong");
@@ -342,10 +227,9 @@ const removeSectorAdmin = catchAsync(async (req, res) => {
 
 const deactivateSectorAdmin = catchAsync(async (req, res) => {
     const { id } = req.body;
-    const userId = mongoose.Types.ObjectId.createFromHexString(id);
 
     // Step 1: Fetch current user
-    const user = await User.findById(userId);
+    const user = await User.findById(id);
 
     if (!user) {
         throw new ApiError(404, "User not found");
@@ -353,7 +237,7 @@ const deactivateSectorAdmin = catchAsync(async (req, res) => {
 
     // Step 2: Toggle the value
     const updatedUser = await User.findByIdAndUpdate(
-        userId,
+        id,
         { isActive: !user.isActive }, // Toggle value
         { new: true }
     );
@@ -367,7 +251,7 @@ const deactivateSectorAdmin = catchAsync(async (req, res) => {
     );
 });
 
-const getTechnician = catchAsync(async (req, res) => {
+const getSelectionTechnician = catchAsync(async (req, res) => {
     const { technicianType } = req.params;
 
     const technicians = await User.find({
@@ -386,15 +270,13 @@ const getTechnician = catchAsync(async (req, res) => {
 
 const assignedTechnician = catchAsync(async (req, res) => {
     const { complaintId, assignedWorker } = req.body;
-    const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
-    const workerObjectId = mongoose.Types.ObjectId.createFromHexString(assignedWorker);
 
-    const complaint = await Complaint.findById(complaintObjectId);
+    const complaint = await Complaint.findById(complaintId);
     if (!complaint) {
         throw new ApiError(404, "Complaint not found");
     }
 
-    const technician = await User.findById(workerObjectId);
+    const technician = await User.findById(assignedWorker);
     if (!technician || technician.role !== "technician") {
         throw new ApiError(404, "Technician not found");
     }
@@ -413,6 +295,7 @@ const assignedTechnician = catchAsync(async (req, res) => {
 
     const response = await Complaint.findById(updatedComplaint._id)
         .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -468,6 +351,7 @@ const rejectResolution = catchAsync(async (req, res) => {
         { new: true }  // Return the updated document
     ).
         populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -520,6 +404,7 @@ const approveResolution = catchAsync(async (req, res) => {
         { new: true }  // Return the updated document
     ).
         populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -555,7 +440,7 @@ const reopenComplaint = catchAsync(async (req, res) => {
     const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
 
     const updateResolution = await Resolution.findOneAndUpdate(
-        { complaintId: complaintObjectId },
+        { complaintId },
         {
             status: "under_review",
         },
@@ -567,13 +452,14 @@ const reopenComplaint = catchAsync(async (req, res) => {
     }
 
     const updatedComplaint = await Complaint.findByIdAndUpdate(
-        complaintObjectId,
+        complaintId,
         {
             status: "In Progress",
         },
         { new: true }
     )
         .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo FCMToken")
         .populate({
             path: 'resolution',
@@ -611,12 +497,11 @@ export {
     getAllSectorAdmin,
     removeSectorAdmin,
     deactivateSectorAdmin,
-    getActiveSectorsGrouped,
     getDashboardOverview,
     getComplaintDetails,
     rejectResolution,
     approveResolution,
-    getTechnician,
+    getSelectionTechnician,
     assignedTechnician,
     reopenComplaint,
 };

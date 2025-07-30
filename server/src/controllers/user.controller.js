@@ -5,6 +5,7 @@ import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import mailSender from '../utils/mailSender.js';
 import { User } from '../models/user.model.js';
+import jwt from 'jsonwebtoken';
 
 const generateAccessAndRefreshToken = async (userId) => {
     try {
@@ -55,7 +56,7 @@ const createSuperAdmin = catchAsync(async (req, res, next) => {
 });
 
 const loginUser = catchAsync(async (req, res) => {
-    const { email, password, FCMToken, role } = req.body;
+    const { email, password, FCMToken, role, isRemember } = req.body;
 
     if (!email || !password) {
         throw new ApiError(400, "All fields are required");
@@ -79,15 +80,17 @@ const loginUser = catchAsync(async (req, res) => {
     user.isLoggedIn = true;
     await user.save({ validateBeforeSave: false });
 
-    //option object is created beacause we dont want to modified the cookie to front side
+    // Create cookie options object
     const option = {
-        httpOnly: true,
-        secure: true
-    }
+        httpOnly: process.env.HTTP_ONLY === 'true',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: isRemember ? Number(process.env.COOKIE_MAX_AGE) : undefined,
+        sameSite: process.env.SAME_SITE === 'true' ? 'Strict' : 'Lax',
+    };
 
     return res.status(200).cookie('accessToken', accessToken, option).cookie('refreshToken', refreshToken, option).json(
         new ApiResponse(200, {
-            loggedInUser : user,
+            loggedInUser: user,
             accessToken,
             refreshToken
         }, "User logged in successfully")
@@ -95,32 +98,43 @@ const loginUser = catchAsync(async (req, res) => {
 });
 
 const logoutUser = catchAsync(async (req, res) => {
+    const refreshToken = req.cookies?.refreshToken || req.header("Authorization")?.replace("Bearer ", "");
 
-    await User.findByIdAndUpdate(
-        req.user._id,
-        {
-            $unset: {
-                refreshToken: 1,
-                FCMToken: 1,
-            },
-            $set: {
-                isLoggedIn: false,
-                lastLogout: new Date()
-            }
-        },
-        {
-            new: true
-        }
-    );
-
+    // Cookie options
     const option = {
-        httpOnly: true,
-        secure: true
+        httpOnly: process.env.HTTP_ONLY === 'true',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.SAME_SITE === 'true' ? 'Strict' : 'Lax',
     }
 
-    return res.status(200).clearCookie("accessToken", option).clearCookie("refreshToken", option).json(
-        new ApiResponse(200, {}, "User logged out")
-    )
+    try {
+        // Only update database if refresh token exists
+        if (refreshToken) {
+            await User.findOneAndUpdate(
+                { refreshToken: refreshToken },
+                {
+                    $unset: {
+                        refreshToken: 1,
+                        FCMToken: 1,
+                    },
+                    $set: {
+                        isLoggedIn: false,
+                        lastLogout: new Date()
+                    }
+                },
+                { new: true }
+            );
+        }
+    } catch (error) {
+        // Log error but don't fail logout
+        console.error('Database update failed during logout:', error);
+    }
+
+    // Always clear cookies regardless of database operation result
+    return res.status(200)
+        .clearCookie("accessToken", option)
+        .clearCookie("refreshToken", option)
+        .json(new ApiResponse(200, {}, "User logged out successfully"));
 });
 
 const getCurrentUser = catchAsync(async (req, res) => {
@@ -130,34 +144,45 @@ const getCurrentUser = catchAsync(async (req, res) => {
 });
 
 const refreshAccessToken = catchAsync(async (req, res) => {
-    const incomingRefreshToken = req.cookie?.refreshToken || req.header("Authorization")?.replace("Bearer ", "");
-
+    const incomingRefreshToken = req.cookies?.refreshToken || req.header("Authorization")?.replace("Bearer ", "");
+    
     if (!incomingRefreshToken || incomingRefreshToken === "null" || incomingRefreshToken === "undefined") {
         throw new ApiError(401, "Unauthorized request");
     }
-
-    const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
-
+    
+    let decodedToken;
+    try {
+        decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
+    } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+            throw new ApiError(401, "Refresh token is expired");
+        }
+        throw new ApiError(403, "Invalid refresh token");
+    }
+    
     const user = await User.findById(decodedToken?._id);
-
     if (!user) {
         throw new ApiError(401, "Invalid refresh token");
     }
-
-    if (incomingRefreshToken != user?.refreshToken) {
+    
+    if (incomingRefreshToken !== user.refreshToken) {
         throw new ApiError(401, "Refresh token is expired or used");
     }
 
     const option = {
-        httpOnly: true,
-        secure: true
-    }
+        httpOnly: process.env.HTTP_ONLY === 'true',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: user?.isRemember ? Number(process.env.COOKIE_MAX_AGE) : undefined,
+        sameSite: process.env.SAME_SITE === 'true' ? 'Strict' : 'Lax',
+    };
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
 
-    return res.status(200).clearCookie("accessToken", accessToken, option).clearCookie("refreshToken", refreshToken, option).json(
-        new ApiResponse(200, { accessToken, refreshToken }, "Access token refreshed")
-    );
+    return res
+        .status(200)
+        .cookie('accessToken', accessToken, option)
+        .cookie('refreshToken', refreshToken, option)
+        .json(new ApiResponse(200, { accessToken, refreshToken }, "Access token refreshed"));
 });
 
 const updateFCMToken = catchAsync(async (req, res) => {

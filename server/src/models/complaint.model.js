@@ -7,10 +7,10 @@ const complaintSchema = new Schema({
         required: true,
     },
 
-    category: {
+    sector: {
         type: String,
         required: true,
-        enum: ['Air Conditioning', 'Electrical', 'Telephone', 'Technical', 'Housekeeping', 'Carpentry', 'Unsafe Condition', 'Others'],
+        enum: ['Air Conditioning', 'Electrical', 'Telephone', 'Technical', 'Housekeeping', 'Carpentry', 'Unsafe Condition', 'Others', 'General'],
         default: 'General'
     },
 
@@ -24,18 +24,13 @@ const complaintSchema = new Schema({
     },
 
     location: {
-        type: String,
-        required: true
+        type: Schema.Types.ObjectId,
+        ref: 'Location'
     },
 
     assignedWorker: {
         type: Schema.Types.ObjectId,
         ref: 'User'
-    }, 
-
-    sector: {
-        type: String,
-        required: true
     },
 
     adminRemark: {

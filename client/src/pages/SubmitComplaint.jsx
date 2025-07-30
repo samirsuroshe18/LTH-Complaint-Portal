@@ -5,12 +5,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 export default function SubmitComplaint() {
   const location = useLocation();
   const navigate = useNavigate();
-  let { selectedCategory, locationId } = location.state || {};
-  // Fallback to sessionStorage if locationId is missing
-  if (!locationId) {
-    locationId = sessionStorage.getItem("locationId") || "";
-  }
 
+  // Extract data from location.state or fallback
+  const { selectedSector } = location.state || {};
+  const initialLocationId =
+    location.state?.locationId || sessionStorage.getItem("locationId") || "";
+
+  const [locationId, setLocationId] = useState(initialLocationId);
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -18,7 +19,7 @@ export default function SubmitComplaint() {
   const [error, setError] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Theme detection with cleanup
+  // 🌗 Theme detection with observer
   useEffect(() => {
     const checkTheme = () => {
       const colorScheme = document.documentElement.getAttribute(
@@ -30,14 +31,14 @@ export default function SubmitComplaint() {
     checkTheme();
 
     const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
+      for (const mutation of mutations) {
         if (
           mutation.type === "attributes" &&
           mutation.attributeName === "data-toolpad-color-scheme"
         ) {
           checkTheme();
         }
-      });
+      }
     });
 
     observer.observe(document.documentElement, {
@@ -48,7 +49,7 @@ export default function SubmitComplaint() {
     return () => observer.disconnect();
   }, []);
 
-  // Memoized theme classes to prevent recalculation
+  // 🎨 Theme classes memoized
   const themeClasses = useMemo(
     () => ({
       background: isDarkMode
@@ -66,9 +67,7 @@ export default function SubmitComplaint() {
         ? "placeholder-gray-400"
         : "placeholder-gray-500",
       hoverBackground: isDarkMode ? "hover:bg-gray-700" : "hover:bg-indigo-50",
-      hoverBorder: isDarkMode
-        ? "hover:border-indigo-400"
-        : "hover:border-indigo-400",
+      hoverBorder: "hover:border-indigo-400",
       footerBackground: isDarkMode ? "bg-gray-700" : "bg-gray-50",
       errorBackground: isDarkMode ? "bg-red-900/20" : "bg-red-50",
       errorBorder: isDarkMode ? "border-red-800" : "border-red-200",
@@ -80,24 +79,20 @@ export default function SubmitComplaint() {
     [isDarkMode]
   );
 
-  // Memoized form validation
-  const isFormValid = useMemo(
-    () => description.trim().length > 0 && locationId?.trim().length > 0,
-    [description, locationId]
-  );
+  const isFormValid = useMemo(() => {
+    return description.trim().length > 0 && locationId?.trim().length > 0;
+  }, [description, locationId]);
 
-  // Optimized file upload handler
+  // 🖼️ File upload
   const handleFileUpload = useCallback((event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // File size validation (2MB)
     if (file.size > 2 * 1024 * 1024) {
       setError("File size should be less than 2MB");
       return;
     }
 
-    // File type validation
     if (!file.type.startsWith("image/")) {
       setError("Please select a valid image file");
       return;
@@ -107,7 +102,7 @@ export default function SubmitComplaint() {
     setError("");
   }, []);
 
-  // Optimized submit handler
+  // ✅ Submit
   const handleSubmit = useCallback(async () => {
     if (!isFormValid) return;
 
@@ -116,7 +111,7 @@ export default function SubmitComplaint() {
 
     try {
       const formData = new FormData();
-      formData.append("category", selectedCategory || "General");
+      formData.append("sector", selectedSector || "General");
       formData.append("locationId", locationId || "0");
       formData.append("description", description);
 
@@ -124,31 +119,27 @@ export default function SubmitComplaint() {
         formData.append("file", selectedFile);
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/complaint/submit`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/v1/complaint/submit`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       if (!response.ok) {
-        let errorMessage = `Request failed with status ${response.status}`;
         const errorData = await response.json();
+        const status = response.status;
 
-        switch (response.status) {
-          case 400:
-            errorMessage = errorData.message || "Invalid request data";
-            break;
-          case 401:
-            errorMessage = "You are not authorized to submit complaints";
-            break;
-          case 413:
-            errorMessage = "File size is too large";
-            break;
-          case 500:
-            errorMessage = "Server error. Please try again later";
-            break;
-          default:
-            errorMessage = errorData.message;
-        }
+        const errorMessage =
+          {
+            400: errorData.message || "Invalid request data",
+            401: "Unauthorized to submit complaints",
+            413: "File size is too large",
+            500: "Server error, please try again later",
+          }[status] ||
+          errorData.message ||
+          `Error ${status}`;
 
         throw new Error(errorMessage);
       }
@@ -161,38 +152,33 @@ export default function SubmitComplaint() {
       }, 2000);
     } catch (err) {
       console.error("Error submitting complaint:", err);
-      setError(err.message || "Failed to submit complaint. Please try again.");
+      setError(err.message || "Submission failed. Try again.");
     } finally {
       setIsSubmitting(false);
     }
   }, [
     isFormValid,
-    selectedCategory,
+    selectedSector,
     locationId,
     description,
     selectedFile,
     navigate,
   ]);
 
-  // Location validation effect
+  // 🧪 Location validation
   useEffect(() => {
-    if (locationId) {
-      setError("");
-    } else if (!locationId) {
-      setError("Location ID is missing please scan again.");
+    if (!locationId) {
+      setError("Location ID is missing. Please scan again.");
     }
   }, [locationId]);
 
-  // Optimized file removal
   const removeFile = useCallback(() => {
     setSelectedFile(null);
     setError("");
   }, []);
 
-  // Optimized error clearing
   const clearError = useCallback(() => setError(""), []);
 
-  // Success screen - early return to avoid unnecessary renders
   if (showSuccess) {
     return (
       <div
@@ -210,8 +196,8 @@ export default function SubmitComplaint() {
             Complaint Submitted Successfully
           </h3>
           <p className={`${themeClasses.textSecondary} mb-4`}>
-            Thank you for your feedback. Our {selectedCategory} team will
-            address your concern shortly.
+            Thank you for your feedback. Our {selectedSector} team will address
+            your concern shortly.
           </p>
           <p className="text-sm text-indigo-600">
             Redirecting to history page...
@@ -227,7 +213,7 @@ export default function SubmitComplaint() {
         {/* Header */}
         <div className="p-2 mb-3">
           <h1 className={`text-2xl font-bold ${themeClasses.textPrimary}`}>
-            {selectedCategory} Complaint
+            {selectedSector} Complaint
           </h1>
           <p className={`mt-1 ${themeClasses.textSecondary}`}>
             Help us improve our service quality
@@ -259,7 +245,7 @@ export default function SubmitComplaint() {
         >
           <div className="p-2">
             <div className="space-y-6">
-              {/* Description Section */}
+              {/* Complaint Description */}
               <div>
                 <div className="flex items-center mb-3">
                   <AlertCircle className="w-5 h-5 text-indigo-600 mr-2" />
@@ -269,16 +255,14 @@ export default function SubmitComplaint() {
                   >
                     Complaint Details
                   </label>
-                  <span className="text-red-500 ml-1" aria-label="Required">
-                    *
-                  </span>
+                  <span className="text-red-500 ml-1">*</span>
                 </div>
                 <div className="relative">
                   <textarea
                     id="description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Please describe the issue in detail. Include time, and any specific concerns..."
+                    placeholder="Describe the issue in detail..."
                     rows={5}
                     maxLength={500}
                     className={`w-full px-4 py-3 border ${themeClasses.border} ${themeClasses.inputBackground} rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors duration-200 resize-none ${themeClasses.inputText} ${themeClasses.inputPlaceholder}`}
@@ -292,7 +276,7 @@ export default function SubmitComplaint() {
                 </div>
               </div>
 
-              {/* Photo Upload Section */}
+              {/* Upload Section */}
               <div>
                 <div className="flex items-center mb-3">
                   <Camera className="w-5 h-5 text-indigo-600 mr-2" />
@@ -301,14 +285,11 @@ export default function SubmitComplaint() {
                   >
                     Photo Evidence
                   </label>
-                  <span
-                    className={`${themeClasses.textTertiary} ml-2 text-sm font-normal`}
-                  >
-                    (Optional)
+                  <span className={`ml-2 text-sm ${themeClasses.textTertiary}`}>
+                    Optional
                   </span>
                 </div>
 
-                {/* Upload Photo Button */}
                 <label
                   className={`flex flex-col items-center justify-center p-6 border-2 border-dashed ${themeClasses.border} rounded-xl ${themeClasses.hoverBorder} ${themeClasses.hoverBackground} transition-colors duration-200 group cursor-pointer`}
                 >
@@ -328,14 +309,14 @@ export default function SubmitComplaint() {
                     aria-label="Upload photo"
                   />
                 </label>
+
                 {selectedFile && (
                   <div
                     className={`mt-4 p-3 ${themeClasses.successBackground} border ${themeClasses.successBorder} rounded-lg`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      {/* Icon + Filename */}
                       <div className="flex items-center flex-1 min-w-0">
-                        <CheckCircle className="w-5 h-5 text-green-600 mr-2 flex-shrink-0" />
+                        <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
                         <span
                           className={`text-sm ${themeClasses.successText} truncate`}
                           title={selectedFile.name}
@@ -343,10 +324,9 @@ export default function SubmitComplaint() {
                           File selected: {selectedFile.name}
                         </span>
                       </div>
-                      {/* Remove Button */}
                       <button
                         onClick={removeFile}
-                        className="text-green-600 hover:text-green-800 flex-shrink-0"
+                        className="text-green-600 hover:text-green-800"
                         aria-label="Remove file"
                       >
                         <X className="w-4 h-4" />
@@ -355,6 +335,7 @@ export default function SubmitComplaint() {
                   </div>
                 )}
               </div>
+
               {/* Submit Button */}
               <div className="pt-4">
                 <button
@@ -378,10 +359,14 @@ export default function SubmitComplaint() {
               </div>
             </div>
           </div>
+
           {/* Footer */}
-          <div className={`${themeClasses.footerBackground} px-8 py-4 border-t ${themeClasses.borderLight}`}>
+          <div
+            className={`${themeClasses.footerBackground} px-8 py-4 border-t ${themeClasses.borderLight}`}
+          >
             <p className={`text-xs ${themeClasses.textTertiary} text-center`}>
-              Your complaint will be reviewed within 24 hours. For urgent matters, please contact the front desk directly.
+              Your complaint will be reviewed within 24 hours. For urgent
+              matters, please contact the front desk directly.
             </p>
           </div>
         </div>

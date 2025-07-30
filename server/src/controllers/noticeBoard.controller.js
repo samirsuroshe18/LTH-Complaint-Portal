@@ -142,7 +142,7 @@ const updateNotice = catchAsync(async (req, res) => {
         updatedBy: req.user._id,
     };
 
-    const notice = await NoticeBoard.findOneAndUpdate({ _id: id, isDeleted: false }, updateData, { new: true }).populate("createdBy", "userName email");
+    const notice = await NoticeBoard.findOneAndUpdate({ _id: id, isDeleted: false }, updateData, { new: true }).populate("createdBy", "userName email").populate("updatedBy", "userName email");
 
     if (!notice) {
         throw new ApiError(404, "Notice not found");
@@ -164,7 +164,7 @@ const deleteNotice = catchAsync(async (req, res) => {
             deletedBy: req.user._id,
         },
         { new: true }
-    );
+    ).populate("createdBy", "userName email").populate("updatedBy", "userName email");
 
     if (!notice) {
         throw new ApiError(404, "Notice not found");

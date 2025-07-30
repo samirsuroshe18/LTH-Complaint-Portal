@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import notFound from '../assets/not-found.png'
 
 const NotFound = () => {
   return (
@@ -11,7 +12,7 @@ const NotFound = () => {
       </p>
       
       <img
-        src="https://cdn.dribbble.com/users/285475/screenshots/2083086/media/a1524314b3e7abc07c7ef5e5c74a77dc.gif"
+        src={notFound}
         alt="Not Found Illustration"
         className="w-80 mt-6"
       />

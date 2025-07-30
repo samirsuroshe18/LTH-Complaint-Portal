@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Filter, MapPin, Clock, User, X, CheckCircle, AlertCircle, Pause } from "lucide-react";
+import { Search, Filter, X } from "lucide-react";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import ComplaintCard from "../components/ComplaintCard";
 
 // Custom debounce hook
 const useDebounce = (value, delay) => {
@@ -89,13 +90,11 @@ const History = () => {
         setComplaints(filteredComplaints);
         setPagination(data.data.pagination);
       } else {
-        console.error("API Error:", data.message);
         setComplaints([]);
         setPagination({});
       }
     } catch (error) {
       if (error.name !== 'AbortError') {
-        console.error("Fetch error:", error);
         setComplaints([]);
         setPagination({});
       }
@@ -124,76 +123,6 @@ const History = () => {
       }
     };
   }, []);
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "Resolved":
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case "In Progress":
-        return <AlertCircle className="w-4 h-4 text-yellow-500" />;
-      case "Pending":
-        return <Pause className="w-4 h-4 text-red-500" />;
-      default:
-        return <AlertCircle className="w-4 h-4 text-gray-500" />;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Resolved":
-        return isDarkMode
-          ? "bg-green-900/30 text-green-300 border-green-700"
-          : "bg-green-100 text-green-800 border-green-200";
-      case "In Progress":
-        return isDarkMode
-          ? "bg-yellow-900/30 text-yellow-300 border-yellow-700"
-          : "bg-yellow-100 text-yellow-800 border-yellow-200";
-      case "Pending":
-        return isDarkMode
-          ? "bg-red-900/30 text-red-300 border-red-700"
-          : "bg-red-100 text-red-800 border-red-200";
-      default:
-        return isDarkMode
-          ? "bg-gray-700 text-gray-300 border-gray-600"
-          : "bg-gray-100 text-gray-800 border-gray-200";
-    }
-  };
-
-  const getCategoryColor = (category) => {
-    const colors = {
-      Technical: isDarkMode
-        ? "bg-blue-900/30 text-blue-300 border-blue-700"
-        : "bg-blue-100 text-blue-800 border-blue-200",
-      Carpentry: isDarkMode
-        ? "bg-orange-900/30 text-orange-300 border-orange-700"
-        : "bg-orange-100 text-orange-800 border-orange-200",
-      Electrical: isDarkMode
-        ? "bg-purple-900/30 text-purple-300 border-purple-700"
-        : "bg-purple-100 text-purple-800 border-purple-200",
-      Plumbing: isDarkMode
-        ? "bg-cyan-900/30 text-cyan-300 border-cyan-700"
-        : "bg-cyan-100 text-cyan-800 border-cyan-200",
-      Maintenance: isDarkMode
-        ? "bg-indigo-900/30 text-indigo-300 border-indigo-700"
-        : "bg-indigo-100 text-indigo-800 border-indigo-200",
-    };
-    return (
-      colors[category] ||
-      (isDarkMode
-        ? "bg-gray-700 text-gray-300 border-gray-600"
-        : "bg-gray-100 text-gray-800 border-gray-200")
-    );
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -296,8 +225,11 @@ const History = () => {
     focusRing: "focus:ring-2 focus:ring-blue-500 focus:border-transparent",
   });
 
+  const theme = getThemeClasses();
+
   return (
-    <div className={`${getThemeClasses().background} min-h-screen`}>
+    <div className={`${theme.background} min-h-screen`}>
+
       {/* Header */}
       <div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -305,12 +237,12 @@ const History = () => {
             <div className="flex flex-col space-y-4 sm:space-y-3 md:flex-row md:items-center md:justify-between md:space-y-0">
               <div className={`flex-1 min-w-0`}>
                 <h1
-                  className={`text-xl sm:text-2xl md:text-3xl font-bold ${getThemeClasses().textPrimary} truncate`}
+                  className={`text-xl sm:text-2xl md:text-3xl font-bold ${theme.textPrimary} truncate`}
                 >
                   Complaint History
                 </h1>
                 <p
-                  className={`text-sm sm:text-base ${getThemeClasses().textSecondary} mt-1 line-clamp-2 sm:line-clamp-none`}
+                  className={`text-sm sm:text-base ${theme.textSecondary} mt-1 line-clamp-2 sm:line-clamp-none`}
                 >
                   Track and manage your submitted complaints
                 </p>
@@ -318,7 +250,7 @@ const History = () => {
 
               <div className="flex items-center justify-between sm:justify-end md:justify-start">
                 <div
-                  className={`flex items-center space-x-2 text-xs sm:text-sm ${getThemeClasses().textTertiary} ${getThemeClasses().badgeBackground} px-3 py-1.5 sm:py-1 rounded-full flex-shrink-0`}
+                  className={`flex items-center space-x-2 text-xs sm:text-sm ${theme.textTertiary} ${theme.badgeBackground} px-3 py-1.5 sm:py-1 rounded-full flex-shrink-0`}
                 >
                   <span className="whitespace-nowrap">
                     <span className="sm:hidden">
@@ -336,22 +268,23 @@ const History = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
         {/* Search and Filter Bar */}
         <div
-          className={`${getThemeClasses().cardBackground} rounded-lg shadow-sm ${getThemeClasses().borderLight} border p-4 sm:p-6 mb-6`}
+          className={`${theme.cardBackground} rounded-lg shadow-sm ${theme.borderLight} border p-4 sm:p-6 mb-6`}
         >
           <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
             {/* Search */}
             <div className="relative flex-1 max-w-full sm:max-w-md">
               <Search
-                className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${getThemeClasses().textTertiary} w-5 h-5`}
+                className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${theme.textTertiary} w-5 h-5`}
               />
               <input
                 type="text"
                 placeholder="Search complaints..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className={`pl-10 pr-4 py-2.5 sm:py-2 w-full ${getThemeClasses().inputBackground} ${getThemeClasses().inputText} ${getThemeClasses().inputPlaceholder} border ${getThemeClasses().border} rounded-lg ${getThemeClasses().focusRing} text-base sm:text-sm`}
+                className={`pl-10 pr-4 py-2.5 sm:py-2 w-full ${theme.inputBackground} ${theme.inputText} ${theme.inputPlaceholder} border ${theme.border} rounded-lg ${theme.focusRing} text-base sm:text-sm`}
               />
               {/* Show loading indicator when search is active */}
               {loading && searchTerm && (
@@ -365,7 +298,7 @@ const History = () => {
             <div className="flex items-center justify-between sm:justify-start space-x-3 sm:space-x-4">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center space-x-2 px-4 py-2.5 sm:py-2 ${getThemeClasses().buttonSecondary} ${getThemeClasses().buttonSecondaryText} rounded-lg transition-colors flex-1 sm:flex-none justify-center sm:justify-start`}
+                className={`flex items-center space-x-2 px-4 py-2.5 sm:py-2 ${theme.buttonSecondary} ${theme.buttonSecondaryText} rounded-lg transition-colors flex-1 sm:flex-none justify-center sm:justify-start`}
               >
                 <Filter className="w-4 h-4" />
                 <span className="text-base sm:text-sm">Filters</span>
@@ -390,20 +323,20 @@ const History = () => {
           {/* Expanded Filters */}
           {showFilters && (
             <div
-              className={`mt-6 pt-6 border-t ${getThemeClasses().borderLight}`}
+              className={`mt-6 pt-6 border-t ${theme.borderLight}`}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Status Filter */}
                 <div>
                   <label
-                    className={`block text-sm font-medium ${getThemeClasses().textSecondary} mb-2`}
+                    className={`block text-sm font-medium ${theme.textSecondary} mb-2`}
                   >
                     Status
                   </label>
                   <select
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
-                    className={`w-full px-3 py-2.5 sm:py-2 ${getThemeClasses().inputBackground} ${getThemeClasses().inputText} border ${getThemeClasses().border} rounded-lg ${getThemeClasses().focusRing} text-base sm:text-sm`}
+                    className={`w-full px-3 py-2.5 sm:py-2 ${theme.inputBackground} ${theme.inputText} border ${theme.border} rounded-lg ${theme.focusRing} text-base sm:text-sm`}
                   >
                     <option value="">All Status</option>
                     <option value="Pending">Pending</option>
@@ -415,7 +348,7 @@ const History = () => {
                 {/* Date Range */}
                 <div>
                   <label
-                    className={`block text-sm font-medium ${getThemeClasses().textSecondary} mb-2`}
+                    className={`block text-sm font-medium ${theme.textSecondary} mb-2`}
                   >
                     Start Date
                   </label>
@@ -423,13 +356,13 @@ const History = () => {
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className={`w-full px-3 py-2.5 sm:py-2 ${getThemeClasses().inputBackground} ${getThemeClasses().inputText} border ${getThemeClasses().border} rounded-lg ${getThemeClasses().focusRing} text-base sm:text-sm`}
+                    className={`w-full px-3 py-2.5 sm:py-2 ${theme.inputBackground} ${theme.inputText} border ${theme.border} rounded-lg ${theme.focusRing} text-base sm:text-sm`}
                   />
                 </div>
 
                 <div>
                   <label
-                    className={`block text-sm font-medium ${getThemeClasses().textSecondary} mb-2`}
+                    className={`block text-sm font-medium ${theme.textSecondary} mb-2`}
                   >
                     End Date
                   </label>
@@ -437,7 +370,7 @@ const History = () => {
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className={`w-full px-3 py-2.5 sm:py-2 ${getThemeClasses().inputBackground} ${getThemeClasses().inputText} border ${getThemeClasses().border} rounded-lg ${getThemeClasses().focusRing} text-base sm:text-sm`}
+                    className={`w-full px-3 py-2.5 sm:py-2 ${theme.inputBackground} ${theme.inputText} border ${theme.border} rounded-lg ${theme.focusRing} text-base sm:text-sm`}
                   />
                 </div>
               </div>
@@ -451,7 +384,7 @@ const History = () => {
             <div className="flex flex-wrap gap-2">
               {selectedStatus && (
                 <span
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${getThemeClasses().statusBlue}`}
+                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${theme.statusBlue}`}
                 >
                   <span className="hidden sm:inline">Status: </span>
                   {selectedStatus}
@@ -465,7 +398,7 @@ const History = () => {
               )}
               {selectedCategory && (
                 <span
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${getThemeClasses().statusGreen}`}
+                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${theme.statusGreen}`}
                 >
                   <span className="hidden sm:inline">Category: </span>
                   {selectedCategory}
@@ -479,7 +412,7 @@ const History = () => {
               )}
               {startDate && (
                 <span
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${getThemeClasses().statusPurple}`}
+                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${theme.statusPurple}`}
                 >
                   <span className="hidden sm:inline">From: </span>
                   {startDate}
@@ -493,7 +426,7 @@ const History = () => {
               )}
               {endDate && (
                 <span
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${getThemeClasses().statusOrange}`}
+                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${theme.statusOrange}`}
                 >
                   <span className="hidden sm:inline">To: </span>
                   {endDate}
@@ -514,85 +447,31 @@ const History = () => {
           {loading ? (
             <div className="flex justify-center py-12">
               <div
-                className={`animate-spin rounded-full h-12 w-12 border-b-2 ${getThemeClasses().spinnerColor}`}
+                className={`animate-spin rounded-full h-12 w-12 border-b-2 ${theme.spinnerColor}`}
               ></div>
             </div>
           ) : complaints.length === 0 ? (
             <div className="text-center py-12">
-              <div className={`${getThemeClasses().textTertiary} mb-2`}>
+              <div className={`${theme.textTertiary} mb-2`}>
                 <Search className="w-12 h-12 mx-auto mb-4" />
               </div>
               <h3
-                className={`text-lg font-medium ${getThemeClasses().textPrimary} mb-2`}
+                className={`text-lg font-medium ${theme.textPrimary} mb-2`}
               >
                 No complaints found
               </h3>
-              <p className={getThemeClasses().textSecondary}>
+              <p className={theme.textSecondary}>
                 No complaints to display right now. Please refresh the page or
                 try again later.
               </p>
             </div>
           ) : (
             complaints.map((complaint) => (
-              <div
+              <ComplaintCard
                 key={complaint._id}
-                className={`${getThemeClasses().cardBackground} rounded-lg border ${getThemeClasses().borderLight} ${getThemeClasses().hoverBackground} ${getThemeClasses().hoverBorder} cursor-pointer transition-all duration-200 transform hover:scale-[1.02] hover:shadow-lg ${getThemeClasses().focusRing}`}
-              >
-                <div className="p-4 sm:p-6">
-                  <div className="flex flex-col space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-base sm:text-lg font-mono font-semibold text-blue-600">
-                          #{complaint.complaintId}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getCategoryColor(complaint.category)}`}
-                        >
-                          {complaint.category}
-                        </span>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(complaint.status)}`}
-                        >
-                          {getStatusIcon(complaint.status)}
-                          <span className="ml-1">{complaint.status}</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3
-                        className={`text-base sm:text-lg font-medium ${getThemeClasses().textPrimary} leading-relaxed`}
-                      >
-                        {complaint.description}
-                      </h3>
-                    </div>
-
-                    <div
-                      className={`flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-4 text-sm ${getThemeClasses().textSecondary}`}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <MapPin className="w-4 h-4 flex-shrink-0" />
-                        <span className="truncate">{complaint.location}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Clock className="w-4 h-4 flex-shrink-0" />
-                        <span className="truncate">
-                          {formatDate(complaint.createdAt)}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <User className="w-4 h-4 flex-shrink-0" />
-                        <span className="capitalize truncate">
-                          {`Assigned To : ${complaint.assignStatus == 'assigned' ? complaint.assignedWorker?.userName : complaint.assignStatus} `}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                complaint={complaint}
+                isDarkMode={isDarkMode}
+              />
             ))
           )}
         </div>

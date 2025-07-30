@@ -4,19 +4,23 @@ import ApiResponse from '../utils/ApiResponse.js';
 import { Complaint } from '../models/complaint.model.js';
 import { uploadOnCloudinary } from '../utils/cloudinary.js';
 import { sendNotification } from '../utils/sendNotification.js';
-import { getSectorByCategory } from '../utils/getSectorByCategory.js';
 import { User } from '../models/user.model.js';
-import { locationIdToName } from '../utils/locationIdToName.js';
+import { Location } from '../models/location.model.js';
 
 const submitComplaint = catchAsync(async (req, res) => {
-    const { category, description, locationId } = req.body;
-    const location = locationIdToName(locationId);
+    const { sector, description, locationId } = req.body;
 
     const complaintId = `QRY-${Math.floor(10000 + Math.random() * 90000)}`;
     let imageUrl = null;
     const imagePath = req.file?.path || null;
 
-    if (!category || !location || !description) {
+    const location = await Location.findOne({ locationId: Number(locationId), sectors: sector, isDeleted: false }).populate("createdBy", "userName email").populate("updatedBy", "userName email");
+
+    if (!location) {
+        throw new ApiError(400, "Invalid location ID or Sector", imagePath);
+    }
+
+    if (!sector || !location || !description) {
         throw new ApiError(400, "Category, location, and description are required fields.", imagePath);
     }
 
@@ -24,8 +28,8 @@ const submitComplaint = catchAsync(async (req, res) => {
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const recentComplaint = await Complaint.findOne({
-        location,
-        category,
+        location: location._id,
+        sector,
         createdAt: { $gte: fortyEightHoursAgo }
     });
 
@@ -40,54 +44,62 @@ const submitComplaint = catchAsync(async (req, res) => {
 
     const complaint = await Complaint.create({
         complaintId,
-        category,
+        sector,
         description,
-        location,
-        sector: getSectorByCategory(category),
+        location: location._id,
         image: imageUrl || '',
     });
+
+    const isExist = await Complaint.findById(complaint._id)
+        .populate('location', 'name');
+
+    if (!isExist) {
+        throw new ApiError(400, "Something went wrong");
+    }
 
     const fcmTokens = await User.find({
         $or: [
             { role: 'sectoradmin', sectorType: complaint.sector },
             { role: 'superadmin' }
         ]
-    }).select('FCMToken role')
-        .lean();
+    }).select('FCMToken role').lean();
 
-    const usersWithTokens = fcmTokens?.filter(user => user.FCMToken);
+    const usersWithTokens = fcmTokens?.filter(user => user.FCMToken && user.role === "sectoradmin");
+    const superadminTokens = fcmTokens?.filter(user => user.FCMToken && user.role === "superadmin");
+
+    const title = `New Complaint: ${complaint.sector}`;
+    const message = `A new complaint has been registered in ${complaint.location.name}. Please review and take action.`;
+
+    const basePayload = {
+        title,
+        message,
+        complaintId: String(complaint._id),
+        category: complaint.sector,
+        ...(complaint?.image && { imageUrl: complaint.image }),
+    };
 
     if (usersWithTokens.length > 0) {
-        const title = `New Complaint: ${complaint.category}`;
-        const message = `A new complaint has been registered in ${complaint.location}. Please review and take action.`;
-
-        const basePayload = {
-            title,
-            message,
-            complaintId: String(complaint._id),
-            category: complaint.category,
+        const payload = {
+            ...basePayload,
+            action: 'NOTIFY_NEW_COMPLAINT'
         };
 
-        if (complaint?.image) {
-            basePayload.imageUrl = complaint.image;
-        }
-
         usersWithTokens.forEach(user => {
-            const action = user.role === 'superadmin'
-                ? 'NOTIFY_NEW_COMPLAINT_ADMIN'
-                : 'NOTIFY_NEW_COMPLAINT';
+            sendNotification(user.FCMToken, payload.action, payload);
+        });
+    } else {
+        const payload = {
+            ...basePayload,
+            action: 'NOTIFY_NEW_COMPLAINT_ADMIN'
+        };
 
-            const payload = {
-                ...basePayload,
-                action: action
-            };
-
-            sendNotification(user.FCMToken, action, payload);
+        superadminTokens.forEach(user => {
+            sendNotification(user.FCMToken, payload.action, payload);
         });
     }
 
     return res.status(201).json(
-        new ApiResponse(201, complaint, "Complaint submitted successfully")
+        new ApiResponse(201, isExist, "Complaint submitted successfully")
     );
 });
 
@@ -138,9 +150,7 @@ const getComplaints = catchAsync(async (req, res) => {
     if (req.query.search) {
         filters.$or = [
             { complaintId: { $regex: req.query.search, $options: 'i' } },
-            { category: { $regex: req.query.search, $options: 'i' } },
             { sector: { $regex: req.query.search, $options: 'i' } },
-            { location: { $regex: req.query.search, $options: 'i' } },
             { description: { $regex: req.query.search, $options: 'i' } },
         ];
     }
@@ -156,6 +166,7 @@ const getComplaints = catchAsync(async (req, res) => {
 
     const updatedComplaint = await Complaint.find(complaintMatch)
         .sort({ createdAt: -1 })
+        .populate("location", "name")
         .populate("assignedWorker", "userName email");
 
     // Apply pagination on combined results

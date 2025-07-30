@@ -9,11 +9,6 @@ import mailSender from "../utils/mailSender.js";
 import { sendNotification } from "../utils/sendNotification.js";
 
 const getDashboardOverview = catchAsync(async (req, res) => {
-    // 1. Total active technicians
-    const technician = await User.find({ role: 'technician', createdBy: req.user._id, isActive: true });
-    const totalTechnician = technician.length;
-
-    // 2. Total complaints by status
     const pendingQueries = await Complaint.countDocuments({ status: 'Pending', sector: req.user.sectorType });
     const resolvedQueries = await Complaint.countDocuments({ status: 'Resolved', sector: req.user.sectorType });
     const inProgressQueries = await Complaint.countDocuments({ status: 'In Progress', sector: req.user.sectorType });
@@ -22,7 +17,6 @@ const getDashboardOverview = catchAsync(async (req, res) => {
     // ✅ Return summary
     return res.status(200).json(
         new ApiResponse(200, {
-            totalTechnician,
             pendingQueries,
             resolvedQueries,
             inProgressQueries,
@@ -54,24 +48,13 @@ const getComplaints = catchAsync(async (req, res) => {
 
     // Entry type filter
     if (req.query.status) {
-        // Split by comma, then trim each status
-        const statuses = req.query.status.split(',').map(s => s.trim());
-
-        if (statuses.length === 2) {
-            // OR condition for exactly two statuses
-            filters.status = { $in: statuses };
-        } else {
-            // Single status filter
-            filters.status = statuses[0];
-        }
+        filters.status = req.query.status;
     }
 
     // Name/keyword search
     if (req.query.search) {
         filters.$or = [
             { complaintId: { $regex: req.query.search, $options: 'i' } },
-            { category: { $regex: req.query.search, $options: 'i' } },
-            { location: { $regex: req.query.search, $options: 'i' } },
             { sector: { $regex: req.query.search, $options: 'i' } }
         ];
     }
@@ -88,6 +71,7 @@ const getComplaints = catchAsync(async (req, res) => {
 
     const updatedComplaint = await Complaint.find(complaintMatch)
         .sort({ createdAt: -1 })
+        .populate("location", "name")
         .populate("assignedWorker", "userName email profile role phoneNo")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
@@ -123,10 +107,10 @@ const getComplaints = catchAsync(async (req, res) => {
 });
 
 const getComplaintDetails = catchAsync(async (req, res) => {
-    const id = mongoose.Types.ObjectId.createFromHexString(req.params.id);
 
-    const complaint = await Complaint.findById(id)
+    const complaint = await Complaint.findById(req.params.id)
         .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -135,7 +119,8 @@ const getComplaintDetails = catchAsync(async (req, res) => {
                 { path: 'approvedBy', select: 'userName email profile role phoneNo' },
                 { path: 'rejectedBy', select: 'userName email profile role phoneNo' }
             ]
-        });
+        })
+        .select("-__v");
 
     if (!complaint) {
         throw new ApiError(404, "Complaint not found");
@@ -159,7 +144,7 @@ const createTechnician = catchAsync(async (req, res) => {
         createdBy: req.user._id,
     });
 
-    const createdUser = await User.findById(user._id);
+    const createdUser = await User.findById(user._id).populate('createdBy', 'userName email');
 
     if (!createdUser) {
         throw new ApiError(500, "Something went wrong");
@@ -198,15 +183,16 @@ const getTechnician = catchAsync(async (req, res) => {
     // Base match conditions for DeliveryEntry
     const technicianMatch = {
         role: "technician",
-        createdBy: req.user._id,
         ...filters
     };
 
+    if(req.user.role!='superadmin')technicianMatch.technicianType = req.user.sectorType;
+
     // Count total documents for pagination
-    const totalCount = await Complaint.countDocuments(technicianMatch);
+    const totalCount = await User.countDocuments(technicianMatch);
     const totalPages = Math.ceil(totalCount / limit);
 
-    const technicians = await User.find(technicianMatch).select("-password -refreshToken -FCMToken -__v");
+    const technicians = await User.find(technicianMatch).sort({ createdAt: -1 }).select("-password -refreshToken -FCMToken -__v");
 
     const response = technicians.slice(skip, skip + limit);
 
@@ -230,9 +216,8 @@ const getTechnician = catchAsync(async (req, res) => {
 
 const removeTechnician = catchAsync(async (req, res) => {
     const { id } = req.body;
-    const userId = mongoose.Types.ObjectId.createFromHexString(id);
 
-    const isRemovedTechnician = await User.deleteOne({ _id: userId, role: "technician" });
+    const isRemovedTechnician = await User.deleteOne({ _id: id, role: "technician" });
 
     if (!isRemovedTechnician) {
         throw new ApiError(500, "something went wrong");
@@ -245,10 +230,9 @@ const removeTechnician = catchAsync(async (req, res) => {
 
 const changeTechnicianState = catchAsync(async (req, res) => {
     const { id } = req.body;
-    const userId = mongoose.Types.ObjectId.createFromHexString(id);
 
     // Step 1: Fetch current user
-    const user = await User.findById(userId);
+    const user = await User.findById(id);
 
     if (!user) {
         throw new ApiError(404, "User not found");
@@ -256,7 +240,7 @@ const changeTechnicianState = catchAsync(async (req, res) => {
 
     // Step 2: Toggle the value
     const updatedUser = await User.findByIdAndUpdate(
-        userId,
+        id,
         { isActive: !user.isActive }, // Toggle value
         { new: true }
     );
@@ -289,15 +273,13 @@ const getSelectionTechnician = catchAsync(async (req, res) => {
 
 const assignedTechnician = catchAsync(async (req, res) => {
     const { complaintId, assignedWorker } = req.body;
-    const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
-    const workerObjectId = mongoose.Types.ObjectId.createFromHexString(assignedWorker);
 
-    const complaint = await Complaint.findById(complaintObjectId);
+    const complaint = await Complaint.findById(complaintId);
     if (!complaint) {
         throw new ApiError(404, "Complaint not found");
     }
 
-    const technician = await User.findById(workerObjectId);
+    const technician = await User.findById(assignedWorker);
     if (!technician || technician.role !== "technician") {
         throw new ApiError(404, "Technician not found");
     }
@@ -316,6 +298,7 @@ const assignedTechnician = catchAsync(async (req, res) => {
 
     const response = await Complaint.findById(updatedComplaint._id)
         .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -371,6 +354,7 @@ const rejectResolution = catchAsync(async (req, res) => {
         { new: true }  // Return the updated document
     ).
         populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -423,6 +407,7 @@ const approveResolution = catchAsync(async (req, res) => {
         { new: true }  // Return the updated document
     ).
         populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo")
         .populate({
             path: 'resolution',
@@ -455,10 +440,9 @@ const approveResolution = catchAsync(async (req, res) => {
 
 const reopenComplaint = catchAsync(async (req, res) => {
     const { complaintId } = req.params;
-    const complaintObjectId = mongoose.Types.ObjectId.createFromHexString(complaintId);
 
     const updateResolution = await Resolution.findOneAndUpdate(
-        { complaintId: complaintObjectId },
+        { complaintId },
         {
             status: "under_review",
         },
@@ -470,13 +454,14 @@ const reopenComplaint = catchAsync(async (req, res) => {
     }
 
     const updatedComplaint = await Complaint.findByIdAndUpdate(
-        complaintObjectId,
+        complaintId,
         {
             status: "In Progress",
         },
         { new: true }
     )
         .populate("assignedWorker", "userName email profile role phoneNo")
+        .populate("location", "name")
         .populate("assignedBy", "userName email profile role phoneNo FCMToken")
         .populate({
             path: 'resolution',

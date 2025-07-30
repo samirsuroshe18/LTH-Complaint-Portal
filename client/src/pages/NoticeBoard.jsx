@@ -92,7 +92,6 @@ const NoticeBoard = () => {
         setNotices(filteredNotices);
         setPagination(data.data.pagination);
       } else {
-        console.error("API Error:", data.message);
         setNotices([]);
         setPagination({});
       }
