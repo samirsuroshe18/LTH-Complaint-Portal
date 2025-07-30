@@ -183,7 +183,6 @@ const HomePage = () => {
       statusRed: isDarkMode
         ? "bg-red-900/30 text-red-300 border-red-700"
         : "bg-red-100 text-red-800 border-red-200",
-      cardBackground: isDarkMode ? "bg-gray-800" : "bg-white",
     }),
     [isDarkMode]
   );
