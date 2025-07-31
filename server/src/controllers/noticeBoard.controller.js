@@ -4,6 +4,8 @@ import { NoticeBoard } from "../models/noticeBoard.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import mongoose from "mongoose";
 import catchAsync from "../utils/catchAsync.js";
+import { User } from "../models/user.model.js";
+import { sendMultiNotification } from "../utils/sendNotification.js";
 
 const createNotice = catchAsync(async (req, res) => {
     const { title, description } = req.body;
@@ -21,7 +23,7 @@ const createNotice = catchAsync(async (req, res) => {
 
     const notice = await NoticeBoard.create({
         title,
-        image: imageUrl || 'N/A',
+        image: imageUrl || '',
         description,
         createdBy: req.user._id,
         updatedBy: req.user._id,
@@ -31,6 +33,26 @@ const createNotice = catchAsync(async (req, res) => {
 
     if (!existNotice) {
         throw new ApiError(400, "Notice creation failed");
+    }
+
+    const payload = {
+        title,
+        message: description,
+        noticeData: JSON.stringify(existNotice),
+        action: 'NOTIFY_NOTICE',
+        ...(existNotice?.image && { imageUrl: existNotice.image }),
+    };
+
+    const users = await User.find({
+        isActive: true,
+        FCMToken: { $ne: null },
+        _id: { $ne: req.user._id }
+    });
+    
+    const tokens = users.map((u) => u.FCMToken).filter(Boolean);
+
+    if (tokens.length > 0) {
+        sendMultiNotification(tokens, payload);
     }
 
     return res.status(201).json(
@@ -121,12 +143,12 @@ const getNotices = catchAsync(async (req, res) => {
 });
 
 const updateNotice = catchAsync(async (req, res) => {
-    const {id} = req.params;
+    const { id } = req.params;
     let { title, description, image } = req.body;
     let imageUrl = null;
     const imagePath = req.file?.path || null;
 
-     if (!title || !description) {
+    if (!title || !description) {
         throw new ApiError(400, "Title and description are required fields.", imagePath);
     }
 

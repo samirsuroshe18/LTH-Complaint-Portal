@@ -3,22 +3,22 @@ import admin from 'firebase-admin';
 const sendNotification = (token, action, payload) => {
 
   const message = {
-        token,
-        notification: {
-            title: payload.title,
-            body: payload.message,
-            imageUrl: payload.imageUrl || undefined,
-        },
-        data: payload,
-        android: {
-            priority: 'high',
-        },
-        apns: {
-            headers: {
-                'apns-priority': '5',
-            },
-        },
-    };
+    token,
+    notification: {
+      title: payload.title,
+      body: payload.message,
+      imageUrl: payload.imageUrl || undefined,
+    },
+    data: payload,
+    android: {
+      priority: 'high',
+    },
+    apns: {
+      headers: {
+        'apns-priority': '5',
+      },
+    },
+  };
 
   admin.messaging().send(message)
     .then((response) => {
@@ -29,4 +29,29 @@ const sendNotification = (token, action, payload) => {
     });
 };
 
-export { sendNotification }
+const sendMultiNotification = (tokens, payload) => {
+
+  const message = {
+    tokens,
+    notification: {
+      title: payload.title,
+      body: payload.message,
+      imageUrl: payload.imageUrl || undefined,
+    },
+    data: payload,
+    android: {
+      priority: 'high',
+    },
+    apns: {
+      headers: {
+        'apns-priority': '5',
+      },
+    },
+  };
+
+  admin.messaging().sendEachForMulticast(message)
+    .then((res) => console.log('Multicast sent:', res.successCount))
+    .catch((err) => console.log('Multicast error:', err));
+};
+
+export { sendNotification, sendMultiNotification }

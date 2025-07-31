@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import { User } from "../models/user.model.js";
 import { Complaint } from "../models/complaint.model.js";
 import { Resolution } from "../models/resolution.model.js";
@@ -186,7 +185,7 @@ const getTechnician = catchAsync(async (req, res) => {
         ...filters
     };
 
-    if(req.user.role!='superadmin')technicianMatch.technicianType = req.user.sectorType;
+    if (req.user.role != 'superadmin') technicianMatch.technicianType = req.user.sectorType;
 
     // Count total documents for pagination
     const totalCount = await User.countDocuments(technicianMatch);
@@ -376,7 +375,9 @@ const rejectResolution = catchAsync(async (req, res) => {
         action: 'RESOLUTION_REJECTED',
     };
 
-    sendNotification(resolution.resolvedBy.FCMToken, payload.action, payload);
+    if (resolution?.rejectedBy?.FCMToken) {
+        sendNotification(resolution.resolvedBy.FCMToken, payload.action, payload);
+    }
 
     return res.status(200).json(
         new ApiResponse(200, complaint, "Resolution rejected successfully.")

@@ -367,13 +367,15 @@ const rejectResolution = catchAsync(async (req, res) => {
     }
 
     let payload = {
-        complaintId: String(resolution.complaintId),
+        complaintId: String(resolution?.complaintId),
         title: 'Resolution Rejected',
         message: 'Your resolution for the complaint has been rejected. Please review the feedback and submit an updated resolution.',
         action: 'RESOLUTION_REJECTED',
     };
 
-    sendNotification(resolution.resolvedBy.FCMToken, payload.action, payload);
+    if(resolution?.resolvedBy?.FCMToken){
+        sendNotification(resolution.resolvedBy.FCMToken, payload.action, payload);
+    }
 
     return res.status(200).json(
         new ApiResponse(200, complaint, "Resolution rejected successfully.")

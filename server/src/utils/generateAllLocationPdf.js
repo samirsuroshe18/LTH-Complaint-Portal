@@ -1,5 +1,4 @@
 import PDFDocument from 'pdfkit';
-import fs from 'fs/promises';
 
 // Helper function to generate PDF for all locations
 export async function generateAllLocationsPDF(locations) {
