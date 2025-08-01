@@ -4,11 +4,6 @@ const sendNotification = (token, action, payload) => {
 
   const message = {
     token,
-    notification: {
-      title: payload.title,
-      body: payload.message,
-      imageUrl: payload.imageUrl || undefined,
-    },
     data: payload,
     android: {
       priority: 'high',
@@ -33,11 +28,6 @@ const sendMultiNotification = (tokens, payload) => {
 
   const message = {
     tokens,
-    notification: {
-      title: payload.title,
-      body: payload.message,
-      imageUrl: payload.imageUrl || undefined,
-    },
     data: payload,
     android: {
       priority: 'high',
