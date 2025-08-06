@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
-import { addNewLocation, allLocationPdf, deleteLocation, getLocationById, getLocations, singleLocationPdf, updateLocation } from "../controllers/location.controller.js";
+import { addLocationsFromExcel, addNewLocation, allLocationPdf, deleteLocation, getLocationById, getLocations, singleLocationPdf, updateLocation } from "../controllers/location.controller.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
 router.route('/add-new-location').post(verifyJwt, addNewLocation);
+router.route('/add-excel-location').post(verifyJwt, upload.single("file"), addLocationsFromExcel);
 router.route('/get-locations').get(getLocations);
 router.route('/get-location/:locationId').get(getLocationById);
 router.route('/update-location/:id').put(verifyJwt, updateLocation);
