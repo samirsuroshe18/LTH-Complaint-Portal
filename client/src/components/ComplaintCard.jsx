@@ -44,19 +44,19 @@ const ComplaintCard = ({ complaint, isDarkMode }) => {
 
   const getCategoryColor = (category) => {
     const colors = {
-      'Housekeeping': isDarkMode
+      Housekeeping: isDarkMode
         ? "bg-green-900/30 text-green-300 border-green-700"
         : "bg-green-100 text-green-800 border-green-200",
-      'Carpentry': isDarkMode
+      Carpentry: isDarkMode
         ? "bg-orange-900/30 text-orange-300 border-orange-700"
         : "bg-orange-100 text-orange-800 border-orange-200",
-      'Telephone': isDarkMode
+      Telephone: isDarkMode
         ? "bg-pink-900/30 text-pink-300 border-pink-700"
         : "bg-pink-100 text-pink-800 border-pink-200",
-      'Electrical': isDarkMode
+      Electrical: isDarkMode
         ? "bg-purple-900/30 text-purple-300 border-purple-700"
         : "bg-purple-100 text-purple-800 border-purple-200",
-      'Technical': isDarkMode
+      Technical: isDarkMode
         ? "bg-blue-900/30 text-blue-300 border-blue-700"
         : "bg-blue-100 text-blue-800 border-blue-200",
       "Unsafe Condition": isDarkMode
@@ -65,7 +65,7 @@ const ComplaintCard = ({ complaint, isDarkMode }) => {
       "Air Conditioning": isDarkMode
         ? "bg-cyan-900/30 text-cyan-300 border-cyan-700"
         : "bg-cyan-100 text-cyan-800 border-cyan-200",
-      'Others': isDarkMode
+      Others: isDarkMode
         ? "bg-yellow-900/30 text-yellow-300 border-yellow-700"
         : "bg-yellow-100 text-yellow-800 border-yellow-200",
     };
@@ -79,7 +79,11 @@ const ComplaintCard = ({ complaint, isDarkMode }) => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+    const date = new Date(dateString);
+    if (isNaN(date)) {
+      return "Not Available";
+    }
+    return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -153,7 +157,7 @@ const ComplaintCard = ({ complaint, isDarkMode }) => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
             <div className="flex items-center space-x-3">
               <span className="text-base sm:text-lg font-mono font-semibold text-blue-600">
-                #{complaint.complaintId}
+                #{complaint?.complaintId ?? "N/A"}
               </span>
             </div>
 
@@ -161,13 +165,13 @@ const ComplaintCard = ({ complaint, isDarkMode }) => {
               <span
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getCategoryColor(complaint.sector)}`}
               >
-                {complaint.sector}
+                {complaint?.sector ?? "N/A"}
               </span>
               <span
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(complaint.status)}`}
               >
-                {getStatusIcon(complaint.status)}
-                <span className="ml-1">{complaint.status}</span>
+                {getStatusIcon(complaint?.status)}
+                <span className="ml-1">{complaint?.status ?? "N/A"}</span>
               </span>
             </div>
           </div>
@@ -176,7 +180,7 @@ const ComplaintCard = ({ complaint, isDarkMode }) => {
             <h3
               className={`text-base sm:text-lg font-medium ${theme.textPrimary} leading-relaxed`}
             >
-              {complaint.description}
+              {complaint?.description ?? "N/A"}
             </h3>
           </div>
 
@@ -185,18 +189,20 @@ const ComplaintCard = ({ complaint, isDarkMode }) => {
           >
             <div className="flex items-center space-x-1">
               <MapPin className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{complaint.location.name}</span>
+              <span className="truncate">
+                {complaint?.location?.name ?? "N/A"}
+              </span>
             </div>
             <div className="flex items-center space-x-1">
               <Clock className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">
-                {formatDate(complaint.createdAt)}
+                {formatDate(complaint?.createdAt)}
               </span>
             </div>
             <div className="flex items-center space-x-1">
               <User className="w-4 h-4 flex-shrink-0" />
               <span className="capitalize truncate">
-                {`Assigned To : ${complaint.assignStatus == "assigned" ? complaint.assignedWorker?.userName : complaint.assignStatus} `}
+                {`Assigned To : ${complaint?.assignStatus == "assigned" ? complaint.assignedWorker?.userName : complaint?.assignStatus} `}
               </span>
             </div>
           </div>
